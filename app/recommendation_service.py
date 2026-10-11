@@ -103,12 +103,21 @@ def _diverse(combos: list[dict[str, Any]], limit: int) -> list[dict[str, Any]]:
 def recommend(menu: MenuService, orders: OrderStore, constraints: Constraints) -> dict[str, Any]:
     # Hard filters that are never relaxed: availability, dietary tags, allergens.
     # Category and sweetness are explicit customer requests, so they scope the pool too.
-    pool = menu.search(
-        dietary_preference=constraints.dietary_preference,
-        category=constraints.category,
-        max_sweetness_level=constraints.max_sweetness_level,
-        exclude_allergens=constraints.exclude_allergens,
-    )
+    def search(category: str | None):
+        return menu.search(
+            dietary_preference=constraints.dietary_preference,
+            category=category,
+            max_sweetness_level=constraints.max_sweetness_level,
+            exclude_allergens=constraints.exclude_allergens,
+        )
+
+    pool = search(constraints.category)
+    stations = {i.station for i in pool}
+    if constraints.category and constraints.require_drink and constraints.require_food and len(stations) == 1:
+        # "an iced coffee and a bite": the category describes one half of the pairing only,
+        # so the other half comes from the whole (diet/allergen-filtered) menu.
+        other = "kitchen" if stations == {"bar"} else "bar"
+        pool = pool + [i for i in search(None) if i.station == other]
     max_items = max(1, min(constraints.max_items, MAX_COMBO_ITEMS))
     backlog = orders.backlog()
 

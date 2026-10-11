@@ -133,3 +133,12 @@ def test_generic_drink_and_food_words_filter_by_station(menu):
     assert food and all(i.station == "kitchen" for i in food)
     iced = menu.search(category="cold drink")
     assert iced and all(i.station == "bar" and "iced" in i.serving for i in iced)
+
+
+def test_category_applies_to_one_half_of_a_drink_and_food_pairing(menu, store):
+    result = recommend(menu, store, Constraints(category="iced", require_drink=True, require_food=True, budget_inr=500))
+    assert result["options"]
+    for option in result["options"]:
+        drinks = [i for i in option["items"] if i["station"] == "bar"]
+        food = [i for i in option["items"] if i["station"] == "kitchen"]
+        assert len(drinks) == 1 and "iced" in drinks[0]["serving"] and food
