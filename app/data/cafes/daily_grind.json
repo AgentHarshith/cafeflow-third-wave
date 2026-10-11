@@ -39,7 +39,10 @@
       "filling_score": 1,
       "sweetness_level": 0,
       "station": "bar",
-      "diet_marker": "veg"
+      "diet_marker": "veg",
+      "serving": [
+        "hot"
+      ]
     },
     {
       "id": "cappuccino_01",
@@ -59,7 +62,10 @@
       "filling_score": 1,
       "sweetness_level": 1,
       "station": "bar",
-      "diet_marker": "veg"
+      "diet_marker": "veg",
+      "serving": [
+        "hot"
+      ]
     },
     {
       "id": "hazelnut_latte_01",
@@ -80,7 +86,10 @@
       "filling_score": 2,
       "sweetness_level": 4,
       "station": "bar",
-      "diet_marker": "veg"
+      "diet_marker": "veg",
+      "serving": [
+        "hot"
+      ]
     },
     {
       "id": "masala_chai_01",
@@ -100,7 +109,10 @@
       "filling_score": 1,
       "sweetness_level": 3,
       "station": "bar",
-      "diet_marker": "veg"
+      "diet_marker": "veg",
+      "serving": [
+        "hot"
+      ]
     },
     {
       "id": "jasmine_green_tea_01",
@@ -120,7 +132,10 @@
       "filling_score": 1,
       "sweetness_level": 0,
       "station": "bar",
-      "diet_marker": "veg"
+      "diet_marker": "veg",
+      "serving": [
+        "hot"
+      ]
     },
     {
       "id": "cold_brew_01",
@@ -140,7 +155,10 @@
       "filling_score": 1,
       "sweetness_level": 1,
       "station": "bar",
-      "diet_marker": "veg"
+      "diet_marker": "veg",
+      "serving": [
+        "iced"
+      ]
     },
     {
       "id": "iced_mocha_01",
@@ -160,7 +178,10 @@
       "filling_score": 2,
       "sweetness_level": 4,
       "station": "bar",
-      "diet_marker": "veg"
+      "diet_marker": "veg",
+      "serving": [
+        "iced"
+      ]
     },
     {
       "id": "lemon_mint_cooler_01",
@@ -180,7 +201,10 @@
       "filling_score": 1,
       "sweetness_level": 2,
       "station": "bar",
-      "diet_marker": "veg"
+      "diet_marker": "veg",
+      "serving": [
+        "iced"
+      ]
     },
     {
       "id": "mango_coconut_smoothie_01",
@@ -200,7 +224,10 @@
       "filling_score": 3,
       "sweetness_level": 4,
       "station": "bar",
-      "diet_marker": "veg"
+      "diet_marker": "veg",
+      "serving": [
+        "iced"
+      ]
     },
     {
       "id": "paneer_tikka_sandwich_01",

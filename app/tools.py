@@ -161,7 +161,11 @@ class ToolResult:
 def _compact_item(item: dict[str, Any]) -> dict[str, Any]:
     keys = ("id", "name", "category", "diet_marker", "price_inr", "preparation_time_minutes", "filling_score",
             "sweetness_level", "dietary_tags", "allergens")
-    return {k: item[k] for k in keys}
+    out = {k: item[k] for k in keys}
+    for optional in ("price_large_inr", "serving", "badges"):  # only when the menu has them
+        if item.get(optional):
+            out[optional] = item[optional]
+    return out
 
 
 def _compact_combo(combo: dict[str, Any]) -> dict[str, Any]:

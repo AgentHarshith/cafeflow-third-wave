@@ -5,7 +5,7 @@
     "fictional": false,
     "currency": "INR",
     "sample_data": true,
-    "notice": "Item names, prices and veg/egg/non-veg markers from a public Third Wave Coffee delivery listing (Bengaluru, Oct 2026). Prices vary by outlet and in-store prices are usually lower. Prep times are CaféFlow estimates; availability is not live.",
+    "notice": "Items, Regular/Large prices, hot/iced options, veg/non-veg markers and 'Must try' picks from Third Wave Coffee's printed café menu. Prices shown are Regular size; Large is listed where offered. Prep times are CaféFlow estimates; availability is not live.",
     "disclaimer": "Unofficial concept demo built at the Google Cloud Builder Pop-Up — not an official Third Wave Coffee app · no real orders are sent · no payments taken",
     "logo": "/static/brands/third_wave/logo.png",
     "logo_alt": "Third Wave Coffee",
@@ -26,342 +26,275 @@
     "quick_prompts": [
       "I'm vegetarian, have ₹250, and need something filling in 10 minutes.",
       "I have ₹500 for a coffee and a bite — ready in 10 minutes.",
-      "Recommend a cold coffee under ₹320.",
-      "Something not too sweet to go with my coffee."
+      "Recommend a cold coffee under ₹300.",
+      "What are your must-try drinks that aren't too sweet?"
     ],
     "allergen_data": "indicative",
-    "data_note": "Veg/egg/non-veg markers come from a public Third Wave Coffee listing; vegan, dairy-free, gluten-free and allergen details are CaféFlow's indicative estimates from standard recipes, not official Third Wave data.",
+    "data_note": "Veg/non-veg markers and prices come from Third Wave Coffee's printed menu; vegan, dairy-free, gluten-free and allergen details are CaféFlow's indicative estimates from standard recipes, not official Third Wave data.",
     "sources": [
-      "https://magicpin.in/Bangalore/Ramagondanahalli/Restaurant/Third-Wave-Coffee/store/1578438/delivery (menu, prices, veg markers; Oct 2026)",
-      "https://www.explorebangalore.com/cafes/third-wave-coffee-roasters/menu (cross-check of drink prices; Sep 2026)",
+      "Third Wave Coffee printed café menu (photo shared by the user at the event, Oct 2026)",
       "https://thirdwavecoffee.in/ (brand palette and logo)"
     ]
   },
   "items": [
     {
-      "id": "tw_hot_latte",
-      "name": "Hot Latte",
-      "category": "Hot Coffee",
-      "station": "bar",
+      "id": "tw_chilli_cheese_garlic_toast",
+      "name": "Chilli Cheese Garlic Toast",
+      "category": "Quick Shareable Bites",
+      "station": "kitchen",
       "diet_marker": "veg",
-      "price_inr": 239,
-      "description": "Espresso with silky steamed milk.",
+      "price_inr": 285,
+      "description": "Garlic toast loaded with chilli and melted cheese.",
       "dietary_tags": [
         "vegetarian"
       ],
       "allergens": [
+        "gluten",
         "milk"
+      ],
+      "preparation_time_minutes": 6,
+      "available": true,
+      "filling_score": 3,
+      "sweetness_level": 0,
+      "badges": [
+        "must-try"
+      ]
+    },
+    {
+      "id": "tw_hummus_pita_platter",
+      "name": "Hummus & Pita Platter",
+      "category": "Quick Shareable Bites",
+      "station": "kitchen",
+      "diet_marker": "veg",
+      "price_inr": 289,
+      "description": "Creamy hummus with warm pita — made for sharing.",
+      "dietary_tags": [
+        "vegetarian"
+      ],
+      "allergens": [
+        "gluten",
+        "sesame"
       ],
       "preparation_time_minutes": 4,
       "available": true,
-      "filling_score": 1,
-      "sweetness_level": 1
+      "filling_score": 3,
+      "sweetness_level": 0
     },
     {
-      "id": "tw_hot_cappuccino",
-      "name": "Hot Cappuccino",
-      "category": "Hot Coffee",
-      "station": "bar",
+      "id": "tw_paneer_cheese_toasties",
+      "name": "Paneer N Cheese Toasties",
+      "category": "Quick Shareable Bites",
+      "station": "kitchen",
       "diet_marker": "veg",
-      "price_inr": 249,
-      "description": "Classic espresso with a thick milk foam cap.",
+      "price_inr": 320,
+      "description": "Toasted paneer and cheese bites.",
       "dietary_tags": [
         "vegetarian"
       ],
       "allergens": [
+        "gluten",
         "milk"
       ],
-      "preparation_time_minutes": 4,
+      "preparation_time_minutes": 7,
       "available": true,
-      "filling_score": 1,
-      "sweetness_level": 1
+      "filling_score": 4,
+      "sweetness_level": 0
     },
     {
-      "id": "tw_hot_flatwhite",
-      "name": "Hot Flatwhite",
-      "category": "Hot Coffee",
-      "station": "bar",
-      "diet_marker": "veg",
-      "price_inr": 259,
-      "description": "A smaller, stronger espresso-and-milk coffee.",
-      "dietary_tags": [
-        "vegetarian"
-      ],
+      "id": "tw_chicken_cheese_toasties",
+      "name": "Chicken N Cheese Toasties",
+      "category": "Quick Shareable Bites",
+      "station": "kitchen",
+      "diet_marker": "non-veg",
+      "price_inr": 320,
+      "description": "Toasted chicken and cheese bites.",
+      "dietary_tags": [],
       "allergens": [
+        "gluten",
         "milk"
       ],
-      "preparation_time_minutes": 4,
+      "preparation_time_minutes": 7,
       "available": true,
-      "filling_score": 1,
-      "sweetness_level": 1
+      "filling_score": 4,
+      "sweetness_level": 0
     },
     {
-      "id": "tw_signature_filter_coffee",
-      "name": "Hot Signature Filter Coffee",
-      "category": "Hot Coffee",
-      "station": "bar",
-      "diet_marker": "veg",
-      "price_inr": 239,
-      "description": "South Indian filter coffee sweetened with jaggery.",
-      "dietary_tags": [
-        "vegetarian"
-      ],
+      "id": "tw_chilli_chicken_calzone",
+      "name": "Chilli Chicken Calzone",
+      "category": "Quick Shareable Bites",
+      "station": "kitchen",
+      "diet_marker": "non-veg",
+      "price_inr": 165,
+      "description": "Folded baked pocket with spicy chilli chicken.",
+      "dietary_tags": [],
       "allergens": [
-        "milk"
-      ],
-      "preparation_time_minutes": 4,
-      "available": true,
-      "filling_score": 1,
-      "sweetness_level": 3
-    },
-    {
-      "id": "tw_hot_sea_salt_mocha",
-      "name": "Hot Sea Salt Mocha",
-      "category": "Hot Coffee",
-      "station": "bar",
-      "diet_marker": "veg",
-      "price_inr": 339,
-      "description": "Chocolate mocha finished with a salty edge.",
-      "dietary_tags": [
-        "vegetarian"
-      ],
-      "allergens": [
+        "gluten",
         "milk"
       ],
       "preparation_time_minutes": 5,
       "available": true,
-      "filling_score": 2,
-      "sweetness_level": 4
+      "filling_score": 3,
+      "sweetness_level": 0
     },
     {
-      "id": "tw_classic_cold_coffee",
-      "name": "Classic Cold Coffee",
-      "category": "Cold Coffee",
-      "station": "bar",
+      "id": "tw_chilli_paneer_calzone",
+      "name": "Chilli Paneer Calzone",
+      "category": "Quick Shareable Bites",
+      "station": "kitchen",
       "diet_marker": "veg",
-      "price_inr": 305,
-      "description": "Creamy blended iced coffee — a bestseller.",
+      "price_inr": 165,
+      "description": "Folded baked pocket with spicy chilli paneer.",
       "dietary_tags": [
         "vegetarian"
       ],
       "allergens": [
+        "gluten",
+        "milk"
+      ],
+      "preparation_time_minutes": 5,
+      "available": true,
+      "filling_score": 3,
+      "sweetness_level": 0
+    },
+    {
+      "id": "tw_classic_korean_bun",
+      "name": "Classic Korean Bun",
+      "category": "Quick Shareable Bites",
+      "station": "kitchen",
+      "diet_marker": "veg",
+      "price_inr": 210,
+      "description": "Soft Korean-style cream cheese garlic bun.",
+      "dietary_tags": [
+        "vegetarian"
+      ],
+      "allergens": [
+        "gluten",
         "milk"
       ],
       "preparation_time_minutes": 4,
       "available": true,
-      "filling_score": 2,
-      "sweetness_level": 4
+      "filling_score": 3,
+      "sweetness_level": 2,
+      "badges": [
+        "must-try"
+      ]
     },
     {
-      "id": "tw_vietnamese_shakerato",
-      "name": "Vietnamese Shakerato",
-      "category": "Cold Coffee",
-      "station": "bar",
+      "id": "tw_gochujang_korean_bun",
+      "name": "Gochujang Korean Bun",
+      "category": "Quick Shareable Bites",
+      "station": "kitchen",
       "diet_marker": "veg",
-      "price_inr": 315,
-      "description": "Espresso shaken frothy over ice, Vietnamese style.",
+      "price_inr": 225,
+      "description": "Korean bun with a sweet-spicy gochujang kick.",
       "dietary_tags": [
         "vegetarian"
       ],
       "allergens": [
-        "milk"
-      ],
-      "preparation_time_minutes": 3,
-      "available": true,
-      "filling_score": 1,
-      "sweetness_level": 4
-    },
-    {
-      "id": "tw_iced_americano",
-      "name": "Iced Americano",
-      "category": "Cold Coffee",
-      "station": "bar",
-      "diet_marker": "veg",
-      "price_inr": 245,
-      "description": "Espresso over cold water and ice.",
-      "dietary_tags": [
-        "vegetarian",
-        "vegan",
-        "dairy-free",
-        "gluten-free"
-      ],
-      "allergens": [],
-      "preparation_time_minutes": 2,
-      "available": true,
-      "filling_score": 1,
-      "sweetness_level": 0
-    },
-    {
-      "id": "tw_classic_cold_brew",
-      "name": "Classic Cold Brew",
-      "category": "Cold Coffee",
-      "station": "bar",
-      "diet_marker": "veg",
-      "price_inr": 315,
-      "description": "Slow-steeped black cold brew, served chilled.",
-      "dietary_tags": [
-        "vegetarian",
-        "vegan",
-        "dairy-free",
-        "gluten-free"
-      ],
-      "allergens": [],
-      "preparation_time_minutes": 2,
-      "available": true,
-      "filling_score": 1,
-      "sweetness_level": 0
-    },
-    {
-      "id": "tw_pour_over",
-      "name": "Pour Over Coffee",
-      "category": "Manual Brew Coffee",
-      "station": "bar",
-      "diet_marker": "veg",
-      "price_inr": 229,
-      "description": "Hand-poured black coffee from beans you choose.",
-      "dietary_tags": [
-        "vegetarian",
-        "vegan",
-        "dairy-free",
-        "gluten-free"
-      ],
-      "allergens": [],
-      "preparation_time_minutes": 6,
-      "available": true,
-      "filling_score": 1,
-      "sweetness_level": 0
-    },
-    {
-      "id": "tw_matcha_latte",
-      "name": "Hot Japanese Matcha Latte",
-      "category": "Tea & Non-Coffee",
-      "station": "bar",
-      "diet_marker": "veg",
-      "price_inr": 305,
-      "description": "Whisked Japanese matcha with steamed milk.",
-      "dietary_tags": [
-        "vegetarian"
-      ],
-      "allergens": [
-        "milk"
+        "gluten",
+        "milk",
+        "soy"
       ],
       "preparation_time_minutes": 4,
       "available": true,
-      "filling_score": 1,
+      "filling_score": 3,
       "sweetness_level": 2
-    },
-    {
-      "id": "tw_masala_chai_latte",
-      "name": "Hot Masala Chai Latte",
-      "category": "Tea & Non-Coffee",
-      "station": "bar",
-      "diet_marker": "veg",
-      "price_inr": 259,
-      "description": "Spiced Indian tea made as a latte.",
-      "dietary_tags": [
-        "vegetarian"
-      ],
-      "allergens": [
-        "milk"
-      ],
-      "preparation_time_minutes": 4,
-      "available": true,
-      "filling_score": 1,
-      "sweetness_level": 3
-    },
-    {
-      "id": "tw_chamomile_tea",
-      "name": "Hot Chamomile Wellness Tea",
-      "category": "Tea & Non-Coffee",
-      "station": "bar",
-      "diet_marker": "veg",
-      "price_inr": 239,
-      "description": "Calming, caffeine-free chamomile infusion.",
-      "dietary_tags": [
-        "vegetarian",
-        "vegan",
-        "dairy-free",
-        "gluten-free"
-      ],
-      "allergens": [],
-      "preparation_time_minutes": 3,
-      "available": true,
-      "filling_score": 1,
-      "sweetness_level": 0
-    },
-    {
-      "id": "tw_butter_croissant",
-      "name": "Butter Croissant",
-      "category": "Bakery",
-      "station": "kitchen",
-      "diet_marker": "veg",
-      "price_inr": 219,
-      "description": "Flaky all-butter croissant, warmed — a bestseller.",
-      "dietary_tags": [
-        "vegetarian"
-      ],
-      "allergens": [
-        "gluten",
-        "milk"
-      ],
-      "preparation_time_minutes": 2,
-      "available": true,
-      "filling_score": 3,
-      "sweetness_level": 1
-    },
-    {
-      "id": "tw_almond_croissant",
-      "name": "Almond Croissant",
-      "category": "Bakery",
-      "station": "kitchen",
-      "diet_marker": "egg",
-      "price_inr": 289,
-      "description": "Croissant filled and topped with almond cream.",
-      "dietary_tags": [],
-      "allergens": [
-        "gluten",
-        "milk",
-        "egg",
-        "tree-nuts"
-      ],
-      "preparation_time_minutes": 2,
-      "available": true,
-      "filling_score": 3,
-      "sweetness_level": 3
-    },
-    {
-      "id": "tw_cinnamon_roll",
-      "name": "Cinnamon Roll",
-      "category": "Bakery",
-      "station": "kitchen",
-      "diet_marker": "egg",
-      "price_inr": 255,
-      "description": "Soft cinnamon roll with cream-cheese frosting.",
-      "dietary_tags": [],
-      "allergens": [
-        "gluten",
-        "milk",
-        "egg"
-      ],
-      "preparation_time_minutes": 2,
-      "available": true,
-      "filling_score": 3,
-      "sweetness_level": 4
     },
     {
       "id": "tw_charcoal_chicken_croissant",
       "name": "Charcoal Chicken Croissant",
-      "category": "Sandwiches & Savoury",
+      "category": "Quick Shareable Bites",
       "station": "kitchen",
       "diet_marker": "non-veg",
-      "price_inr": 249,
+      "price_inr": 185,
       "description": "Croissant with smoky grilled chicken.",
       "dietary_tags": [],
       "allergens": [
         "gluten",
         "milk"
       ],
-      "preparation_time_minutes": 5,
+      "preparation_time_minutes": 4,
+      "available": true,
+      "filling_score": 3,
+      "sweetness_level": 0
+    },
+    {
+      "id": "tw_mushroom_cheese_croissant",
+      "name": "Mushroom N Cheese Croissant",
+      "category": "Quick Shareable Bites",
+      "station": "kitchen",
+      "diet_marker": "veg",
+      "price_inr": 239,
+      "description": "Flaky croissant with mushrooms and melted cheese.",
+      "dietary_tags": [
+        "vegetarian"
+      ],
+      "allergens": [
+        "gluten",
+        "milk"
+      ],
+      "preparation_time_minutes": 4,
+      "available": true,
+      "filling_score": 3,
+      "sweetness_level": 0,
+      "badges": [
+        "must-try"
+      ]
+    },
+    {
+      "id": "tw_paneer_tikka_wrap",
+      "name": "Paneer Tikka Wrap",
+      "category": "Wraps",
+      "station": "kitchen",
+      "diet_marker": "veg",
+      "price_inr": 320,
+      "description": "Tandoori-spiced paneer tikka rolled in a wrap.",
+      "dietary_tags": [
+        "vegetarian"
+      ],
+      "allergens": [
+        "gluten",
+        "milk"
+      ],
+      "preparation_time_minutes": 7,
+      "available": true,
+      "filling_score": 4,
+      "sweetness_level": 0
+    },
+    {
+      "id": "tw_tandoori_chicken_wrap",
+      "name": "Tandoori Chicken Wrap",
+      "category": "Wraps",
+      "station": "kitchen",
+      "diet_marker": "non-veg",
+      "price_inr": 320,
+      "description": "Tandoori chicken rolled in a wrap.",
+      "dietary_tags": [],
+      "allergens": [
+        "gluten",
+        "milk"
+      ],
+      "preparation_time_minutes": 7,
+      "available": true,
+      "filling_score": 4,
+      "sweetness_level": 0
+    },
+    {
+      "id": "tw_spiced_potato_sandwich",
+      "name": "Spiced Potato Sandwich",
+      "category": "Handcrafted Sandwiches",
+      "station": "kitchen",
+      "diet_marker": "veg",
+      "price_inr": 265,
+      "description": "Toasted sandwich with Indian-spiced potato.",
+      "dietary_tags": [
+        "vegetarian"
+      ],
+      "allergens": [
+        "gluten",
+        "milk"
+      ],
+      "preparation_time_minutes": 7,
       "available": true,
       "filling_score": 4,
       "sweetness_level": 0
@@ -369,14 +302,55 @@
     {
       "id": "tw_mexican_paneer_sandwich",
       "name": "Mexican Paneer Sandwich",
-      "category": "Sandwiches & Savoury",
+      "category": "Handcrafted Sandwiches",
       "station": "kitchen",
       "diet_marker": "veg",
-      "price_inr": 379,
+      "price_inr": 320,
       "description": "Spicy Mexican-style paneer, toasted.",
       "dietary_tags": [
         "vegetarian"
       ],
+      "allergens": [
+        "gluten",
+        "milk"
+      ],
+      "preparation_time_minutes": 8,
+      "available": true,
+      "filling_score": 5,
+      "sweetness_level": 0,
+      "badges": [
+        "must-try"
+      ]
+    },
+    {
+      "id": "tw_paneer_tikka_sandwich",
+      "name": "Paneer Tikka Sandwich",
+      "category": "Handcrafted Sandwiches",
+      "station": "kitchen",
+      "diet_marker": "veg",
+      "price_inr": 320,
+      "description": "Paneer tikka in a toasted sandwich.",
+      "dietary_tags": [
+        "vegetarian"
+      ],
+      "allergens": [
+        "gluten",
+        "milk"
+      ],
+      "preparation_time_minutes": 8,
+      "available": true,
+      "filling_score": 5,
+      "sweetness_level": 0
+    },
+    {
+      "id": "tw_peppery_chicken_sandwich",
+      "name": "Peppery Chicken Sandwich",
+      "category": "Handcrafted Sandwiches",
+      "station": "kitchen",
+      "diet_marker": "non-veg",
+      "price_inr": 320,
+      "description": "Black-pepper chicken, toasted.",
+      "dietary_tags": [],
       "allergens": [
         "gluten",
         "milk"
@@ -389,10 +363,10 @@
     {
       "id": "tw_tandoori_chicken_sandwich",
       "name": "Tandoori Chicken Sandwich",
-      "category": "Sandwiches & Savoury",
+      "category": "Handcrafted Sandwiches",
       "station": "kitchen",
       "diet_marker": "non-veg",
-      "price_inr": 379,
+      "price_inr": 320,
       "description": "Tandoori-spiced chicken, toasted.",
       "dietary_tags": [],
       "allergens": [
@@ -405,52 +379,31 @@
       "sweetness_level": 0
     },
     {
-      "id": "tw_egg_cheese_bagel",
-      "name": "American Egg & Cheese Bagel",
-      "category": "All-Day Breakfast",
+      "id": "tw_spicy_chicken_sandwich",
+      "name": "Spicy Chicken Sandwich",
+      "category": "Handcrafted Sandwiches",
       "station": "kitchen",
-      "diet_marker": "egg",
-      "price_inr": 305,
-      "description": "Egg and melted cheese in a toasted bagel.",
+      "diet_marker": "non-veg",
+      "price_inr": 320,
+      "description": "Fiery spiced chicken, toasted.",
       "dietary_tags": [],
-      "allergens": [
-        "gluten",
-        "milk",
-        "egg"
-      ],
-      "preparation_time_minutes": 7,
-      "available": true,
-      "filling_score": 4,
-      "sweetness_level": 0
-    },
-    {
-      "id": "tw_classic_pancakes",
-      "name": "Classic Pancakes",
-      "category": "All-Day Breakfast",
-      "station": "kitchen",
-      "diet_marker": "veg",
-      "price_inr": 249,
-      "description": "Fluffy pancakes with maple syrup.",
-      "dietary_tags": [
-        "vegetarian"
-      ],
       "allergens": [
         "gluten",
         "milk"
       ],
       "preparation_time_minutes": 8,
       "available": true,
-      "filling_score": 4,
-      "sweetness_level": 4
+      "filling_score": 5,
+      "sweetness_level": 0
     },
     {
-      "id": "tw_tiramisu",
-      "name": "Tiramisu",
-      "category": "Desserts",
+      "id": "tw_margherita_pizza",
+      "name": "Margherita Pizza",
+      "category": "Pizza",
       "station": "kitchen",
       "diet_marker": "veg",
-      "price_inr": 385,
-      "description": "Espresso-soaked sponge layered with mascarpone.",
+      "price_inr": 150,
+      "description": "Classic tomato and mozzarella pizza.",
       "dietary_tags": [
         "vegetarian"
       ],
@@ -458,29 +411,545 @@
         "gluten",
         "milk"
       ],
-      "preparation_time_minutes": 1,
+      "preparation_time_minutes": 9,
+      "available": true,
+      "filling_score": 4,
+      "sweetness_level": 0
+    },
+    {
+      "id": "tw_veg_bonanza_pizza",
+      "name": "Veg Bonanza Pizza",
+      "category": "Pizza",
+      "station": "kitchen",
+      "diet_marker": "veg",
+      "price_inr": 250,
+      "description": "Pizza loaded with assorted vegetables.",
+      "dietary_tags": [
+        "vegetarian"
+      ],
+      "allergens": [
+        "gluten",
+        "milk"
+      ],
+      "preparation_time_minutes": 10,
+      "available": true,
+      "filling_score": 5,
+      "sweetness_level": 0
+    },
+    {
+      "id": "tw_mexican_paneer_pizza",
+      "name": "Mexican Paneer Pizza",
+      "category": "Pizza",
+      "station": "kitchen",
+      "diet_marker": "veg",
+      "price_inr": 300,
+      "description": "Pizza with spicy Mexican-style paneer.",
+      "dietary_tags": [
+        "vegetarian"
+      ],
+      "allergens": [
+        "gluten",
+        "milk"
+      ],
+      "preparation_time_minutes": 10,
+      "available": true,
+      "filling_score": 5,
+      "sweetness_level": 0
+    },
+    {
+      "id": "tw_tandoori_chicken_pizza",
+      "name": "Tandoori Chicken Pizza",
+      "category": "Pizza",
+      "station": "kitchen",
+      "diet_marker": "non-veg",
+      "price_inr": 300,
+      "description": "Pizza with tandoori chicken.",
+      "dietary_tags": [],
+      "allergens": [
+        "gluten",
+        "milk"
+      ],
+      "preparation_time_minutes": 10,
+      "available": true,
+      "filling_score": 5,
+      "sweetness_level": 0
+    },
+    {
+      "id": "tw_mexican_paneer_salad",
+      "name": "Mexican Paneer Salad",
+      "category": "Salads",
+      "station": "kitchen",
+      "diet_marker": "veg",
+      "price_inr": 309,
+      "description": "Mexican-spiced paneer over fresh greens.",
+      "dietary_tags": [
+        "vegetarian"
+      ],
+      "allergens": [
+        "milk"
+      ],
+      "preparation_time_minutes": 5,
+      "available": true,
+      "filling_score": 3,
+      "sweetness_level": 0
+    },
+    {
+      "id": "tw_herb_chicken_salad",
+      "name": "Herb Chicken Salad",
+      "category": "Salads",
+      "station": "kitchen",
+      "diet_marker": "non-veg",
+      "price_inr": 309,
+      "description": "Herb-grilled chicken over fresh greens.",
+      "dietary_tags": [],
+      "allergens": [
+        "milk"
+      ],
+      "preparation_time_minutes": 5,
+      "available": true,
+      "filling_score": 3,
+      "sweetness_level": 0
+    },
+    {
+      "id": "tw_vietnamese_shakerato",
+      "name": "Vietnamese Shakerato",
+      "category": "TWC Specials",
+      "station": "bar",
+      "diet_marker": "veg",
+      "price_inr": 269,
+      "description": "Espresso shaken frothy, Vietnamese style.",
+      "dietary_tags": [
+        "vegetarian"
+      ],
+      "allergens": [
+        "milk"
+      ],
+      "preparation_time_minutes": 3,
+      "available": true,
+      "filling_score": 1,
+      "sweetness_level": 4,
+      "price_large_inr": 290,
+      "serving": [
+        "hot",
+        "iced"
+      ],
+      "badges": [
+        "must-try"
+      ]
+    },
+    {
+      "id": "tw_sea_salt_mocha",
+      "name": "Sea Salt Mocha",
+      "category": "TWC Specials",
+      "station": "bar",
+      "diet_marker": "veg",
+      "price_inr": 295,
+      "description": "Chocolate mocha finished with sea salt.",
+      "dietary_tags": [
+        "vegetarian"
+      ],
+      "allergens": [
+        "milk"
+      ],
+      "preparation_time_minutes": 5,
+      "available": true,
+      "filling_score": 2,
+      "sweetness_level": 4,
+      "price_large_inr": 330,
+      "serving": [
+        "hot",
+        "iced"
+      ]
+    },
+    {
+      "id": "tw_orange_zest_mocha",
+      "name": "Orange Zest Mocha",
+      "category": "TWC Specials",
+      "station": "bar",
+      "diet_marker": "veg",
+      "price_inr": 295,
+      "description": "Chocolate mocha brightened with orange zest.",
+      "dietary_tags": [
+        "vegetarian"
+      ],
+      "allergens": [
+        "milk"
+      ],
+      "preparation_time_minutes": 5,
+      "available": true,
+      "filling_score": 2,
+      "sweetness_level": 4,
+      "price_large_inr": 330,
+      "serving": [
+        "hot",
+        "iced"
+      ],
+      "badges": [
+        "must-try"
+      ]
+    },
+    {
+      "id": "tw_french_vanilla_latte",
+      "name": "French Vanilla Latte",
+      "category": "TWC Specials",
+      "station": "bar",
+      "diet_marker": "veg",
+      "price_inr": 295,
+      "description": "Smooth latte with French vanilla.",
+      "dietary_tags": [
+        "vegetarian"
+      ],
+      "allergens": [
+        "milk"
+      ],
+      "preparation_time_minutes": 4,
+      "available": true,
+      "filling_score": 1,
+      "sweetness_level": 4,
+      "price_large_inr": 330,
+      "serving": [
+        "hot",
+        "iced"
+      ]
+    },
+    {
+      "id": "tw_dry_hazelnut_cappuccino",
+      "name": "Dry Hazelnut Cappuccino",
+      "category": "TWC Specials",
+      "station": "bar",
+      "diet_marker": "veg",
+      "price_inr": 299,
+      "description": "Foam-heavy cappuccino with hazelnut.",
+      "dietary_tags": [
+        "vegetarian"
+      ],
+      "allergens": [
+        "milk",
+        "tree-nuts"
+      ],
+      "preparation_time_minutes": 4,
+      "available": true,
+      "filling_score": 1,
+      "sweetness_level": 3,
+      "price_large_inr": 335,
+      "serving": [
+        "hot",
+        "iced"
+      ]
+    },
+    {
+      "id": "tw_caramel_macchiato",
+      "name": "Caramel Macchiato",
+      "category": "TWC Specials",
+      "station": "bar",
+      "diet_marker": "veg",
+      "price_inr": 305,
+      "description": "Vanilla milk marked with espresso and caramel.",
+      "dietary_tags": [
+        "vegetarian"
+      ],
+      "allergens": [
+        "milk"
+      ],
+      "preparation_time_minutes": 4,
+      "available": true,
+      "filling_score": 1,
+      "sweetness_level": 4,
+      "price_large_inr": 340,
+      "serving": [
+        "hot",
+        "iced"
+      ]
+    },
+    {
+      "id": "tw_toffee_nut_latte",
+      "name": "Toffee Nut Latte",
+      "category": "TWC Specials",
+      "station": "bar",
+      "diet_marker": "veg",
+      "price_inr": 335,
+      "description": "Indulgent latte with toffee and nutty notes.",
+      "dietary_tags": [
+        "vegetarian"
+      ],
+      "allergens": [
+        "milk",
+        "tree-nuts"
+      ],
+      "preparation_time_minutes": 4,
+      "available": true,
+      "filling_score": 2,
+      "sweetness_level": 5,
+      "price_large_inr": 375,
+      "serving": [
+        "hot",
+        "iced"
+      ],
+      "badges": [
+        "must-try"
+      ]
+    },
+    {
+      "id": "tw_americano",
+      "name": "Americano",
+      "category": "Classics",
+      "station": "bar",
+      "diet_marker": "veg",
+      "price_inr": 209,
+      "description": "Espresso lengthened with water.",
+      "dietary_tags": [
+        "vegetarian",
+        "vegan",
+        "dairy-free",
+        "gluten-free"
+      ],
+      "allergens": [],
+      "preparation_time_minutes": 2,
+      "available": true,
+      "filling_score": 1,
+      "sweetness_level": 0,
+      "price_large_inr": 239,
+      "serving": [
+        "hot",
+        "iced"
+      ]
+    },
+    {
+      "id": "tw_cappuccino",
+      "name": "Cappuccino",
+      "category": "Classics",
+      "station": "bar",
+      "diet_marker": "veg",
+      "price_inr": 219,
+      "description": "Espresso with a thick milk foam cap.",
+      "dietary_tags": [
+        "vegetarian"
+      ],
+      "allergens": [
+        "milk"
+      ],
+      "preparation_time_minutes": 4,
+      "available": true,
+      "filling_score": 1,
+      "sweetness_level": 1,
+      "price_large_inr": 249,
+      "serving": [
+        "hot"
+      ]
+    },
+    {
+      "id": "tw_latte",
+      "name": "Latte",
+      "category": "Classics",
+      "station": "bar",
+      "diet_marker": "veg",
+      "price_inr": 219,
+      "description": "Espresso with silky steamed milk.",
+      "dietary_tags": [
+        "vegetarian"
+      ],
+      "allergens": [
+        "milk"
+      ],
+      "preparation_time_minutes": 4,
+      "available": true,
+      "filling_score": 1,
+      "sweetness_level": 1,
+      "price_large_inr": 249,
+      "serving": [
+        "hot",
+        "iced"
+      ]
+    },
+    {
+      "id": "tw_hot_chocolate",
+      "name": "Hot Chocolate",
+      "category": "Classics",
+      "station": "bar",
+      "diet_marker": "veg",
+      "price_inr": 239,
+      "description": "Rich chocolate drink.",
+      "dietary_tags": [
+        "vegetarian"
+      ],
+      "allergens": [
+        "milk"
+      ],
+      "preparation_time_minutes": 4,
+      "available": true,
+      "filling_score": 2,
+      "sweetness_level": 4,
+      "price_large_inr": 269,
+      "serving": [
+        "hot",
+        "iced"
+      ]
+    },
+    {
+      "id": "tw_flat_white",
+      "name": "Flat White",
+      "category": "Classics",
+      "station": "bar",
+      "diet_marker": "veg",
+      "price_inr": 239,
+      "description": "Smaller, stronger espresso-and-milk coffee.",
+      "dietary_tags": [
+        "vegetarian"
+      ],
+      "allergens": [
+        "milk"
+      ],
+      "preparation_time_minutes": 4,
+      "available": true,
+      "filling_score": 1,
+      "sweetness_level": 1,
+      "price_large_inr": 269,
+      "serving": [
+        "hot"
+      ]
+    },
+    {
+      "id": "tw_espresso_doppio",
+      "name": "Espresso (Doppio)",
+      "category": "Classics",
+      "station": "bar",
+      "diet_marker": "veg",
+      "price_inr": 189,
+      "description": "A double shot of espresso.",
+      "dietary_tags": [
+        "vegetarian",
+        "vegan",
+        "dairy-free",
+        "gluten-free"
+      ],
+      "allergens": [],
+      "preparation_time_minutes": 2,
+      "available": true,
+      "filling_score": 1,
+      "sweetness_level": 0,
+      "serving": [
+        "hot"
+      ]
+    },
+    {
+      "id": "tw_affogato",
+      "name": "Affogato",
+      "category": "Classics",
+      "station": "bar",
+      "diet_marker": "veg",
+      "price_inr": 195,
+      "description": "Espresso poured over ice cream.",
+      "dietary_tags": [
+        "vegetarian"
+      ],
+      "allergens": [
+        "milk"
+      ],
+      "preparation_time_minutes": 3,
       "available": true,
       "filling_score": 2,
       "sweetness_level": 4
     },
     {
-      "id": "tw_fudge_brownie",
-      "name": "Classic Chocolate Fudge Brownie",
-      "category": "Desserts",
-      "station": "kitchen",
-      "diet_marker": "egg",
-      "price_inr": 235,
-      "description": "Dense, dark-chocolate fudge brownie.",
-      "dietary_tags": [],
-      "allergens": [
-        "gluten",
-        "milk",
-        "egg"
+      "id": "tw_signature_filter_coffee",
+      "name": "Signature Filter Coffee",
+      "category": "Classics",
+      "station": "bar",
+      "diet_marker": "veg",
+      "price_inr": 219,
+      "description": "South Indian filter coffee.",
+      "dietary_tags": [
+        "vegetarian"
       ],
-      "preparation_time_minutes": 1,
+      "allergens": [
+        "milk"
+      ],
+      "preparation_time_minutes": 4,
+      "available": true,
+      "filling_score": 1,
+      "sweetness_level": 3,
+      "serving": [
+        "hot"
+      ],
+      "badges": [
+        "must-try"
+      ]
+    },
+    {
+      "id": "tw_strawberry_matcha_latte",
+      "name": "Strawberry Matcha Latte",
+      "category": "Matcha",
+      "station": "bar",
+      "diet_marker": "veg",
+      "price_inr": 250,
+      "description": "Iced matcha latte layered with strawberry.",
+      "dietary_tags": [
+        "vegetarian"
+      ],
+      "allergens": [
+        "milk"
+      ],
+      "preparation_time_minutes": 4,
+      "available": true,
+      "filling_score": 1,
+      "sweetness_level": 4,
+      "price_large_inr": 285,
+      "serving": [
+        "iced"
+      ]
+    },
+    {
+      "id": "tw_japanese_matcha_latte",
+      "name": "Japanese Matcha Latte",
+      "category": "Matcha",
+      "station": "bar",
+      "diet_marker": "veg",
+      "price_inr": 279,
+      "description": "Whisked Japanese matcha with milk.",
+      "dietary_tags": [
+        "vegetarian"
+      ],
+      "allergens": [
+        "milk"
+      ],
+      "preparation_time_minutes": 4,
+      "available": true,
+      "filling_score": 1,
+      "sweetness_level": 2,
+      "price_large_inr": 305,
+      "serving": [
+        "hot",
+        "iced"
+      ],
+      "badges": [
+        "must-try"
+      ]
+    },
+    {
+      "id": "tw_vanilla_matcha_bobble_tea",
+      "name": "Vanilla Matcha (Bobble Tea)",
+      "category": "Matcha",
+      "station": "bar",
+      "diet_marker": "veg",
+      "price_inr": 285,
+      "description": "Vanilla matcha bubble tea.",
+      "dietary_tags": [
+        "vegetarian"
+      ],
+      "allergens": [
+        "milk"
+      ],
+      "preparation_time_minutes": 5,
       "available": true,
       "filling_score": 2,
-      "sweetness_level": 5
+      "sweetness_level": 4,
+      "price_large_inr": 320,
+      "serving": [
+        "iced"
+      ],
+      "badges": [
+        "must-try"
+      ]
     }
   ]
 }

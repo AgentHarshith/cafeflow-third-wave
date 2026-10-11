@@ -1,10 +1,11 @@
-"""CaféFlow AI conversational agent.
+"""CaféFlow AI conversational agent, built on Google ADK.
 
-Gemini (Google Gen AI SDK, API-key auth) decides which backend tool to call via
-native function calling; the tools run deterministic Python and their results are
-sent back to Gemini in a bounded loop. When Gemini is not configured or fails, a
-clearly-labelled rule-based fallback drives the *same* tools, so the demo keeps
-working without ever pretending to be a live Gemini answer.
+Barista AI (an ADK router agent) understands the customer and transfers to the
+right specialist sub-agent (see adk_agents.py). Gemini decides which deterministic
+backend tool to call; the tools run validated Python and their results go back to
+Gemini. When Gemini is not configured or fails, a clearly-labelled rule-based
+fallback drives the *same* tools, so the demo keeps working without ever pretending
+to be a live Gemini answer.
 """
 
 from __future__ import annotations
@@ -13,59 +14,29 @@ import logging
 import re
 import threading
 import time
-from collections.abc import Callable
+import uuid
+from collections import OrderedDict
 from datetime import datetime, timezone
 from typing import Any
 
+from google.adk.models.base_llm import BaseLlm
+from google.adk.models.google_llm import Gemini
+from google.adk.planners import BuiltInPlanner
+from google.adk.runners import RunConfig, Runner
+from google.adk.sessions import InMemorySessionService
+from google.genai import types
+
+from .adk_agents import AGENT_LABELS, ROUTER, build_agent_graph
 from .config import Settings
 from .schemas import ChatResponse, ChatTurn, ToolCallTrace
-from .schemas import CafeProfile
 from .tools import ToolExecutor, ToolResult
 
 logger = logging.getLogger("cafeflow.agent")
 
+APP_NAME = "cafeflow"
 HISTORY_TURNS = 12
 VERIFY_CACHE_SECONDS = 300
-
-def build_system_instruction(cafe: CafeProfile) -> str:
-    if cafe.fictional:
-        who = f'the ordering companion for "{cafe.name}", a fictional demo café (sample menu, prices in Indian rupees ₹).'
-    else:
-        who = (
-            f'an unofficial concept-demo ordering companion for {cafe.name} (prices in Indian rupees ₹). '
-            f"You are not affiliated with {cafe.name}; orders here are demo orders and are never sent to the café. "
-            "If asked, say so plainly."
-        )
-    data = (
-        f"\nData caveat: {cafe.data_note} Whenever you mention dietary suitability or allergens, add a short "
-        "reminder to confirm with café staff."
-        if cafe.allergen_data == "indicative"
-        else ""
-    )
-    return f"You are CaféFlow AI, {who}{data}\n" + _INSTRUCTION_BODY
-
-
-_INSTRUCTION_BODY = """
-Help customers find menu items that fit their budget, dietary requirements, taste and time constraints.
-
-Tools:
-- recommend_options: the time-aware engine. Use it for ANY request involving budget, time, diet, allergies, "filling" or sweetness. Pass every constraint the customer has stated so far in the conversation (carry earlier constraints forward unless the customer changed them). When a constraint changes, call it again — never reuse earlier results.
-- search_menu: browse or look up items (e.g. "what teas do you have?").
-- estimate_wait: wait time for a specific set of items.
-- prepare_order: when the customer clearly says which items they want to order, create a draft. It does NOT place the order — tell them to tap "Review & confirm" on the draft card to place it.
-
-The latest customer message may be followed by an [App context] note (added by the app, not typed by the customer) listing the option cards currently on screen with their item ids. Use those ids for prepare_order or estimate_wait (e.g. "I'll take option 2"). Never repeat that note or show item ids.
-
-Rules:
-- Every item name, price, availability, dietary fact and wait time you mention must come from a tool result. Never invent menu items, prices, order IDs or tool results.
-- Never say an order has been placed. Orders exist only after the customer presses Confirm in the app.
-- Dietary requirements and allergies are hard constraints; never suggest anything that violates them.
-- Wait times are approximate estimates from a simple rule that includes the current order queue — say "about" or "~".
-- If no option satisfies everything, say so plainly, then offer the closest alternatives and exactly what each one misses.
-- Briefly explain why your top pick fits (budget left, wait vs. deadline, how filling it is) and mention one useful trade-off.
-- Never quote internal numbers like filling or sweetness scores; describe them in words ("very filling", "lightly sweet").
-- Ask a clarifying question only when you truly cannot proceed.
-- Be friendly and concise: at most about 110 words. Use a short bulleted list for options with bold item names. Never show item ids. The app shows option cards with Add buttons under your message, so do not repeat every detail."""
+MAX_SESSIONS = 500
 
 _ECHOED_CONTEXT = re.compile(r"\s*\[(?:App context|Cards shown).*\Z", re.S)
 
@@ -116,10 +87,6 @@ class GeminiStatus:
             }
 
 
-class GeminiUnavailable(Exception):
-    """Raised when Gemini cannot answer; carries a customer-safe reason."""
-
-
 def _classify_error(exc: Exception) -> tuple[str, bool]:
     """Return (safe description, retryable). Never includes the API key or raw payloads."""
     from google.genai import errors
@@ -137,7 +104,17 @@ def _classify_error(exc: Exception) -> tuple[str, bool]:
         if code and code >= 500:
             return f"Gemini service error ({code}).", True
         return f"Gemini request failed ({code} {status}).".replace(" )", ")"), False
+    if type(exc).__name__ == "LlmCallsLimitExceededError":
+        return "The agent used too many steps for one message.", False
     return "Could not reach the Gemini API.", True
+
+
+def _thinking_level_supported(model: str, level: str | None) -> bool:
+    """thinking_level exists on Gemini 3+ (and the -latest aliases that point at it)."""
+    if not level:
+        return False
+    match = re.match(r"gemini-(\d+)", model)
+    return model.endswith("-latest") or bool(match and int(match.group(1)) >= 3)
 
 
 # ---------------------------------------------------------------------------
@@ -146,30 +123,58 @@ def _classify_error(exc: Exception) -> tuple[str, bool]:
 
 
 class CafeAgent:
-    def __init__(self, settings: Settings, executor: ToolExecutor, client_factory: Callable[[], Any] | None = None):
+    def __init__(self, settings: Settings, executor: ToolExecutor, llm: BaseLlm | None = None):
         self.settings = settings
         self.executor = executor
         self.model = settings.gemini_model
         self.status = GeminiStatus(settings.gemini_configured, self.model)
-        self.system_instruction = build_system_instruction(executor.menu.cafe)
-        self._client_factory = client_factory
+        self._llm_override = llm
         self._client: Any = None
         self._model_discovery_done = False
-        self._thinking_enabled = True
+        self._turn_results: dict[str, list[tuple[str, ToolResult]]] = {}
+        self._sessions: OrderedDict[str, None] = OrderedDict()
+        self._session_service = InMemorySessionService()
+        self._runner: Runner | None = None
 
-    # -- client ----------------------------------------------------------------
+    # -- Gemini client / model ---------------------------------------------------
 
     def _get_client(self):
         if self._client is None:
-            if self._client_factory is not None:
-                self._client = self._client_factory()
-            else:
-                from google import genai
+            from google import genai
 
-                # Explicit AI Studio API-key auth; vertexai=False prevents silently
-                # switching to Vertex credentials via GOOGLE_GENAI_USE_VERTEXAI.
-                self._client = genai.Client(api_key=self.settings.gemini_api_key, vertexai=False)
+            # Explicit AI Studio API-key auth; vertexai=False prevents silently switching to
+            # Vertex credentials. Transient 429/5xx errors are retried with backoff.
+            self._client = genai.Client(
+                api_key=self.settings.gemini_api_key,
+                vertexai=False,
+                http_options=types.HttpOptions(
+                    retry_options=types.HttpRetryOptions(
+                        attempts=3, initial_delay=1.5, max_delay=6.0, http_status_codes=[429, 500, 502, 503, 504]
+                    )
+                ),
+            )
         return self._client
+
+    def _model_object(self) -> BaseLlm:
+        if self._llm_override is not None:
+            return self._llm_override
+        return Gemini(model=self.model, client=self._get_client())
+
+    def _planner(self) -> BuiltInPlanner | None:
+        level = self.settings.gemini_thinking_level
+        if self._llm_override is not None or not _thinking_level_supported(self.model, level):
+            return None
+        return BuiltInPlanner(thinking_config=types.ThinkingConfig(thinking_level=level.upper()))
+
+    def _record(self, invocation_id: str, agent_name: str, result: ToolResult) -> None:
+        self._turn_results.setdefault(invocation_id, []).append((agent_name, result))
+
+    def _get_runner(self) -> Runner:
+        if self._runner is None:
+            root = build_agent_graph(self._model_object(), self.executor, self.executor.menu.cafe, self._record,
+                                     planner=self._planner())
+            self._runner = Runner(app_name=APP_NAME, agent=root, session_service=self._session_service)
+        return self._runner
 
     def _discover_model(self) -> str | None:
         """Pick a generateContent-capable Flash model when the configured one 404s."""
@@ -184,7 +189,7 @@ class CafeAgent:
                 if "generateContent" in actions and name.startswith("gemini"):
                     names.append(name)
         except Exception:  # noqa: BLE001
-            logger.warning("Model discovery failed", exc_info=False)
+            logger.warning("Model discovery failed")
             return None
 
         def rank(name: str) -> tuple:
@@ -195,63 +200,6 @@ class CafeAgent:
 
         names.sort(key=rank)
         return names[0] if names else None
-
-    def _config(self, allow_tools: bool = True):
-        from google.genai import types
-
-        tools = [types.Tool(function_declarations=[types.FunctionDeclaration(**d) for d in self.executor.declarations])]
-        tool_config = None
-        if not allow_tools:
-            tool_config = types.ToolConfig(function_calling_config=types.FunctionCallingConfig(mode="NONE"))
-        thinking = None
-        if self._thinking_level_supported():
-            thinking = types.ThinkingConfig(thinking_level=self.settings.gemini_thinking_level.upper())
-        return types.GenerateContentConfig(
-            system_instruction=self.system_instruction,
-            tools=tools,
-            tool_config=tool_config,
-            thinking_config=thinking,
-            automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
-        )
-
-    def _thinking_level_supported(self) -> bool:
-        """thinking_level exists on Gemini 3+ (and the -latest aliases that point at it)."""
-        if not self.settings.gemini_thinking_level or not self._thinking_enabled:
-            return False
-        match = re.match(r"gemini-(\d+)", self.model)
-        return self.model.endswith("-latest") or bool(match and int(match.group(1)) >= 3)
-
-    def _generate(self, contents: list, allow_tools: bool = True):
-        """One Gemini call with a single retry for transient errors and model fallback on 404."""
-        client = self._get_client()
-        attempts = 0
-        while True:
-            attempts += 1
-            try:
-                response = client.models.generate_content(
-                    model=self.model, contents=contents, config=self._config(allow_tools)
-                )
-                self.status.success(self.model, "Last Gemini request succeeded.")
-                return response
-            except Exception as exc:  # noqa: BLE001
-                detail, retryable = _classify_error(exc)
-                logger.warning("Gemini call failed: %s", detail)
-                if "model is not available" in detail:
-                    replacement = self._discover_model()
-                    if replacement and replacement != self.model:
-                        logger.info("Switching Gemini model %s -> %s", self.model, replacement)
-                        self.model = replacement
-                        continue
-                if getattr(exc, "code", None) == 400 and self._thinking_level_supported():
-                    # Model rejected thinking_level: drop it and retry with the model's default.
-                    logger.info("Disabling thinking_level for model %s", self.model)
-                    self._thinking_enabled = False
-                    continue
-                if retryable and attempts < 3:
-                    time.sleep(2.0 * attempts)  # 2s, then 4s
-                    continue
-                self.status.failure(detail)
-                raise GeminiUnavailable(detail) from exc
 
     def verify(self) -> dict[str, Any]:
         """Make a lightweight real API request (models.get) to confirm key + model."""
@@ -265,20 +213,44 @@ class CafeAgent:
             if "model is not available" in detail:
                 replacement = self._discover_model()
                 if replacement:
-                    self.model = replacement
+                    self.model, self._runner = replacement, None  # rebuild agents on the new model
                     return self.verify()
             self.status.failure(detail)
         return self.status.as_dict()
 
+    # -- sessions --------------------------------------------------------------
+
+    async def _ensure_session(self, session_id: str) -> None:
+        if session_id in self._sessions:
+            self._sessions.move_to_end(session_id)
+            return
+        existing = await self._session_service.get_session(app_name=APP_NAME, user_id=session_id, session_id=session_id)
+        if existing is None:
+            await self._session_service.create_session(app_name=APP_NAME, user_id=session_id, session_id=session_id)
+        self._sessions[session_id] = None
+        while len(self._sessions) > MAX_SESSIONS:
+            old, _ = self._sessions.popitem(last=False)
+            await self._session_service.delete_session(app_name=APP_NAME, user_id=old, session_id=old)
+
     # -- chat ----------------------------------------------------------------
 
-    def chat(self, message: str, history: list[ChatTurn], shown_options: list[list[str]] | None = None) -> ChatResponse:
-        if not self.settings.gemini_configured:
-            return self._fallback(message, history, "Gemini API key not configured.")
+    async def chat(
+        self,
+        message: str,
+        history: list[ChatTurn],
+        shown_options: list[list[str]] | None = None,
+        session_id: str | None = None,
+    ) -> ChatResponse:
+        session_id = session_id or uuid.uuid4().hex
+        if not self.settings.gemini_configured and self._llm_override is None:
+            return self._fallback(message, history, "Gemini API key not configured.", session_id)
         try:
-            return self._gemini_chat(message, history, shown_options or [])
-        except GeminiUnavailable as exc:
-            return self._fallback(message, history, str(exc))
+            return await self._adk_chat(message, shown_options or [], session_id)
+        except Exception as exc:  # noqa: BLE001 - any agent failure degrades to the labelled fallback
+            detail, _ = _classify_error(exc)
+            logger.warning("Agent turn failed: %s", detail)
+            self.status.failure(detail)
+            return self._fallback(message, history, detail, session_id)
 
     @staticmethod
     def _text_of(content) -> str:
@@ -297,56 +269,39 @@ class CafeAgent:
             return None
         return "[App context — option cards currently on screen: " + "; ".join(lines) + "]"
 
-    def _gemini_chat(self, message: str, history: list[ChatTurn], shown_options: list[list[str]] | None = None) -> ChatResponse:
-        from google.genai import types
-
-        contents: list = []
-        for turn in history[-HISTORY_TURNS:]:
-            if not contents and turn.role != "user":
-                continue  # conversations must start with a user turn
-            role = "user" if turn.role == "user" else "model"
-            contents.append(types.Content(role=role, parts=[types.Part.from_text(text=turn.text)]))
-        parts = [types.Part.from_text(text=message)]
-        if context := self._screen_context(shown_options or []):
-            parts.append(types.Part.from_text(text=context))
-        contents.append(types.Content(role="user", parts=parts))
-
-        results: list[ToolResult] = []
+    async def _run_turn(self, session_id: str, content: types.Content) -> tuple[str, list[str], list[tuple[str, ToolResult]]]:
+        """Run one ADK invocation; return (final text, agents involved, tool results)."""
+        runner = self._get_runner()
+        route: list[str] = []
         reply = ""
-        guard_used = False
-        for _ in range(self.settings.max_tool_rounds):
-            response = self._generate(contents)
-            candidate = (response.candidates or [None])[0]
-            content = getattr(candidate, "content", None)
-            calls = response.function_calls or []
-            if not calls:
-                reply = self._text_of(content).strip()
-                # Guard against an answer that quotes prices without consulting the menu.
-                if not results and not guard_used and "₹" in reply and content is not None:
-                    guard_used = True
-                    contents.append(content)
-                    contents.append(types.Content(role="user", parts=[types.Part.from_text(text=PRICE_GUARD_PROMPT)]))
-                    reply = ""
-                    continue
-                break
-            if content is not None:
-                contents.append(content)  # keeps function-call parts and thought signatures intact
-            parts = []
-            for call in calls:
-                result = self.executor.execute(call.name, dict(call.args or {}))
-                results.append(result)
-                parts.append(
-                    types.Part(
-                        function_response=types.FunctionResponse(
-                            id=getattr(call, "id", None), name=call.name, response=result.response
-                        )
-                    )
-                )
-            contents.append(types.Content(role="user", parts=parts))
-        else:
-            # Round limit hit: ask for a final answer with tools disabled.
-            reply = self._text_of(getattr((self._generate(contents, allow_tools=False).candidates or [None])[0], "content", None)).strip()
+        invocation_ids: set[str] = set()
+        run_config = RunConfig(max_llm_calls=max(4, self.settings.max_tool_rounds * 2))
+        async for event in runner.run_async(user_id=session_id, session_id=session_id, new_message=content,
+                                            run_config=run_config):
+            invocation_ids.add(event.invocation_id)
+            if event.author and event.author != "user" and (not route or route[-1] != event.author):
+                route.append(event.author)
+            if event.is_final_response():
+                text = self._text_of(event.content).strip()
+                if text:
+                    reply = text
+        results = [r for inv in invocation_ids for r in self._turn_results.pop(inv, [])]
+        return reply, route, results
 
+    async def _adk_chat(self, message: str, shown_options: list[list[str]], session_id: str) -> ChatResponse:
+        await self._ensure_session(session_id)
+        parts = [types.Part.from_text(text=message)]
+        if context := self._screen_context(shown_options):
+            parts.append(types.Part.from_text(text=context))
+
+        reply, route, results = await self._run_turn(session_id, types.Content(role="user", parts=parts))
+        # Guard against an answer that quotes prices without consulting the menu.
+        if not results and "₹" in reply:
+            guard = types.Content(role="user", parts=[types.Part.from_text(text=PRICE_GUARD_PROMPT)])
+            reply, more_route, results = await self._run_turn(session_id, guard)
+            route += [a for a in more_route if not route or a != route[-1]]
+
+        self.status.success(self.model, "Last Gemini request succeeded.")
         reply = _ECHOED_CONTEXT.sub("", reply).strip()  # never show internal context/ids to the customer
         if not reply:
             reply = (
@@ -354,23 +309,38 @@ class CafeAgent:
                 if results
                 else "Sorry, I couldn't come up with an answer. Could you rephrase that?"
             )
-        return self._build_response(reply, "gemini", results, model=self.model)
+        return self._build_response(reply, "gemini", results, model=self.model, route=route or [ROUTER],
+                                    session_id=session_id)
 
     # -- structured payload ----------------------------------------------------
 
     @staticmethod
-    def _build_response(reply: str, mode: str, results: list[ToolResult], model: str | None = None,
-                        notice: str | None = None) -> ChatResponse:
+    def _build_response(reply: str, mode: str, results: list[tuple[str | None, ToolResult]], model: str | None = None,
+                        notice: str | None = None, route: list[str] | None = None,
+                        session_id: str | None = None) -> ChatResponse:
         payload: dict[str, Any] = {}
-        for result in results:  # later calls override earlier ones of the same kind
+        searched: dict[str, dict[str, Any]] = {}
+        for _, result in results:  # later calls override earlier ones of the same kind
             if result.ok:
                 payload.update(result.ui)
+                for item in result.ui.get("menu_items", []):
+                    searched.setdefault(item["id"], item)
+        # Show cards for the items the reply actually talks about, so "option 1" means what the customer read.
+        mentioned = [i for i in searched.values() if i["name"].lower() in reply.lower()]
+        if mentioned:
+            payload["menu_items"] = mentioned
         return ChatResponse(
             reply=reply,
             mode=mode,  # type: ignore[arg-type]
             model=model,
             notice=notice,
-            tool_calls=[ToolCallTrace(name=r.name, arguments=r.arguments, ok=r.ok, summary=r.summary) for r in results],
+            session_id=session_id,
+            agent_route=[AGENT_LABELS.get(a, a) for a in (route or [])],
+            tool_calls=[
+                ToolCallTrace(name=r.name, arguments=r.arguments, ok=r.ok, summary=r.summary,
+                              agent=AGENT_LABELS.get(agent, agent) if agent else None)
+                for agent, r in results
+            ],
             recommendations=payload.get("recommendations", []),
             alternatives=payload.get("alternatives", []),
             menu_items=payload.get("menu_items", [])[:8],
@@ -380,7 +350,7 @@ class CafeAgent:
 
     # -- fallback ----------------------------------------------------------------
 
-    def _fallback(self, message: str, history: list[ChatTurn], reason: str) -> ChatResponse:
+    def _fallback(self, message: str, history: list[ChatTurn], reason: str, session_id: str | None = None) -> ChatResponse:
         constraints: dict[str, Any] = {}
         for turn in [*history[-HISTORY_TURNS:], ChatTurn(role="user", text=message)]:
             if turn.role == "user":
@@ -392,7 +362,7 @@ class CafeAgent:
             result = self.executor.execute("recommend_options", constraints)
         reply = _fallback_reply(constraints, result)
         notice = f"Demo mode — {reason} Responses use rule-based parsing, not Gemini."
-        return self._build_response(reply, "fallback", [result], notice=notice)
+        return self._build_response(reply, "fallback", [(None, result)], notice=notice, session_id=session_id)
 
 
 # ---------------------------------------------------------------------------

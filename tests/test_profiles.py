@@ -17,7 +17,7 @@ def test_profile_loads_and_validates(profile):
     menu = MenuService.from_file(CAFES_DIR / f"{profile}.json")
     items = menu.all_items()
     assert menu.cafe.id == profile
-    assert 10 <= len(items) <= 30, "keep menus small enough for exhaustive combination search"
+    assert 10 <= len(items) <= 60, "keep menus small enough for exhaustive combination search"
     assert {i.station for i in items} == {"bar", "kitchen"}
     assert any(i.available for i in items)
 
@@ -41,10 +41,17 @@ def test_profile_supports_the_demo_scenario(profile):
 
 
 @pytest.mark.parametrize("profile", PROFILES)
-@pytest.mark.parametrize("phrase", ["cold drink", "drinks", "food", "coffee"])
+@pytest.mark.parametrize("phrase", ["cold drink", "iced coffee", "hot coffee", "drinks", "food", "coffee"])
 def test_common_category_phrases_resolve(profile, phrase):
     menu = MenuService.from_file(CAFES_DIR / f"{profile}.json")
-    assert menu.parse_category(phrase)
+    assert menu.search(category=phrase)
+
+
+def test_temperature_phrases_filter_on_serving_options():
+    menu = MenuService.from_file(CAFES_DIR / "third_wave.json")
+    iced = menu.search(category="cold coffee")
+    assert iced and all("iced" in i.serving for i in iced)
+    assert "tw_signature_filter_coffee" not in {i.id for i in iced}  # hot only on the menu
 
 
 def test_real_cafe_profiles_are_labelled_unofficial():

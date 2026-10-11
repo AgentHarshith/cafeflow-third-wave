@@ -8,7 +8,8 @@ from typing import Annotated, Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 DietMarker = Literal["veg", "egg", "non-veg"]  # the standard Indian menu marker
-Station = Literal["bar", "kitchen"]  # bar = drinks, kitchen = food; the two work in parallel
+Station = Literal["bar", "kitchen"]
+Serving = Literal["hot", "iced"]  # bar = drinks, kitchen = food; the two work in parallel
 DietaryTag = Literal["vegetarian", "vegan", "dairy-free", "gluten-free"]
 Allergen = Literal["milk", "gluten", "tree-nuts", "peanuts", "sesame", "soy", "egg"]
 OrderStatus = Literal["confirmed", "preparing", "ready", "completed", "cancelled"]
@@ -35,6 +36,9 @@ class MenuItem(BaseModel):
     available: bool
     filling_score: int = Field(ge=1, le=5)
     sweetness_level: int | None = Field(default=None, ge=0, le=5)
+    price_large_inr: int | None = Field(default=None, ge=1, le=2000)  # Large size, where offered
+    serving: tuple[Serving, ...] = ()  # hot / iced options for drinks
+    badges: tuple[str, ...] = ()  # e.g. "must-try" as printed on the café's menu
 
     @model_validator(mode="after")
     def _tags_match_allergens(self) -> "MenuItem":
@@ -55,6 +59,8 @@ class MenuItem(BaseModel):
             problems.append("diet_marker 'veg' must match the vegetarian tag")
         if self.diet_marker == "egg" and "egg" not in allergens:
             problems.append("egg-marked items must list egg as an allergen")
+        if self.price_large_inr is not None and self.price_large_inr < self.price_inr:
+            problems.append("large price cannot be below the regular price")
         if problems:
             raise ValueError(f"{self.id}: " + "; ".join(problems))
         return self
@@ -160,6 +166,8 @@ class ChatRequest(BaseModel):
     history: list[ChatTurn] = Field(default_factory=list, max_length=30)
     # Item ids of the option cards currently on screen, so "I'll take option 2" can be resolved.
     shown_options: list[list[ItemIdStr]] = Field(default_factory=list, max_length=12)
+    # Anonymous per-browser id that keys the server-side ADK session (no personal data).
+    session_id: str | None = Field(default=None, pattern=r"^[A-Za-z0-9_-]{8,64}$")
 
 
 class ToolCallTrace(BaseModel):
@@ -167,6 +175,7 @@ class ToolCallTrace(BaseModel):
     arguments: dict[str, Any]
     ok: bool
     summary: str
+    agent: str | None = None  # which ADK agent called the tool
 
 
 class ChatResponse(BaseModel):
@@ -174,6 +183,8 @@ class ChatResponse(BaseModel):
     mode: Literal["gemini", "fallback"]
     model: str | None = None
     notice: str | None = None
+    session_id: str | None = None
+    agent_route: list[str] = Field(default_factory=list)  # e.g. ["Barista AI", "Discovery"]
     tool_calls: list[ToolCallTrace] = Field(default_factory=list)
     recommendations: list[dict[str, Any]] = Field(default_factory=list)
     alternatives: list[dict[str, Any]] = Field(default_factory=list)

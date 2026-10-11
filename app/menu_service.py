@@ -67,8 +67,8 @@ _STATION_WORDS = {
     "food": "kitchen", "meal": "kitchen", "eat": "kitchen", "bite": "kitchen", "snack-food": "kitchen",
 }
 # Common customer words -> words that appear in category names.
-_CATEGORY_WORD_ALIASES = {"iced": "cold", "chilled": "cold", "chai": "tea", "wrap": "sandwich", "pastry": "bakery",
-                          "sweet": "dessert", "brew": "brew", "hot": "hot"}
+_CATEGORY_WORD_ALIASES = {"chai": "tea", "pastry": "bakery", "sweet": "dessert", "shareable": "bite", "share": "bite"}
+_TEMPERATURE_WORDS = {"cold": "iced", "iced": "iced", "ice": "iced", "chilled": "iced", "hot": "hot", "warm": "hot"}
 _CATEGORY_STOPWORDS = {"drink", "drinks", "item", "items", "something", "a", "an", "some", "the", "beverage"}
 
 _ALLERGEN_SYNONYMS: dict[str, str] = {
@@ -112,6 +112,16 @@ def parse_allergens(allergens: Iterable[str] | None) -> frozenset[str]:
     return frozenset(result)
 
 
+def split_temperature(phrase: str | None) -> tuple[str | None, str | None]:
+    """'cold coffee' -> ('coffee', 'iced'); 'iced' -> (None, 'iced'); 'sandwich' -> ('sandwich', None)."""
+    if not phrase:
+        return None, None
+    words = re.split(r"[\s\-/,]+", phrase.lower().strip())
+    temps = {_TEMPERATURE_WORDS[w] for w in words if w in _TEMPERATURE_WORDS}
+    rest = " ".join(w for w in words if w and w not in _TEMPERATURE_WORDS)  # category words are parsed later
+    return (rest or None), (temps.pop() if len(temps) == 1 else None)
+
+
 def item_public(item: MenuItem) -> dict[str, Any]:
     """Serializable view of an item for tools and the frontend."""
     return {
@@ -128,6 +138,9 @@ def item_public(item: MenuItem) -> dict[str, Any]:
         "available": item.available,
         "filling_score": item.filling_score,
         "sweetness_level": item.sweetness_level,
+        "price_large_inr": item.price_large_inr,
+        "serving": list(item.serving),
+        "badges": list(item.badges),
     }
 
 
@@ -178,6 +191,8 @@ class MenuService:
                     matches.add(name)
             if matches:
                 return frozenset(matches)
+            if wanted <= {"coffee", "drink", "beverage"}:  # menus that group coffees as "Classics", "Specials"...
+                return frozenset(i.category for i in self._items.values() if i.station == "bar")
         raise InvalidPreferenceError(
             f"Unknown category '{category}'. Use one of: {', '.join(self.categories)}, 'drinks' or 'food'."
         )
@@ -216,7 +231,12 @@ class MenuService:
     ) -> list[MenuItem]:
         """Return available items matching every provided filter, cheapest first."""
         required_tags = parse_dietary(dietary_preference)
-        categories = self.parse_category(category)
+        rest, temperature = split_temperature(category)
+        if temperature and rest in ("coffee", "coffees", "drink", "drinks", "beverage", "beverages"):
+            # "iced coffee" means any iced drink at the bar, whatever section the menu files it under
+            categories = frozenset(i.category for i in self._items.values() if i.station == "bar")
+        else:
+            categories = self.parse_category(rest)
         blocked = parse_allergens(exclude_allergens)
         matches = [
             item
@@ -225,6 +245,7 @@ class MenuService:
             and required_tags <= set(item.dietary_tags)
             and not (blocked & set(item.allergens))
             and (not categories or item.category in categories)
+            and (temperature is None or temperature in item.serving)
             and (budget_inr is None or item.price_inr <= budget_inr)
             and (max_prep_time_minutes is None or item.preparation_time_minutes <= max_prep_time_minutes)
             and (min_filling_score is None or item.filling_score >= min_filling_score)

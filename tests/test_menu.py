@@ -124,3 +124,12 @@ def test_queue_load_affects_recommendations(menu, store):
     # with the kitchen backed up, only bar-only items could fit; none are "filling" enough
     assert all(o["estimated_wait_minutes"] <= 10 for o in after["options"])
     assert len(after["options"]) < len(before["options"])
+
+
+def test_generic_drink_and_food_words_filter_by_station(menu):
+    drinks = menu.search(category="drinks")
+    assert drinks and all(i.station == "bar" for i in drinks)
+    food = menu.search(category="food")
+    assert food and all(i.station == "kitchen" for i in food)
+    iced = menu.search(category="cold drink")
+    assert iced and all(i.station == "bar" and "iced" in i.serving for i in iced)

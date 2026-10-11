@@ -87,12 +87,12 @@ def render_page(filename: str, cafe: CafeProfile) -> str:
     return page
 
 
-def create_app(settings: Settings | None = None, client_factory=None) -> FastAPI:
+def create_app(settings: Settings | None = None, llm=None) -> FastAPI:
     settings = settings or load_settings()
     menu = MenuService.from_file(settings.menu_path)
     orders = OrderStore(menu)
     executor = ToolExecutor(menu, orders)
-    agent = CafeAgent(settings, executor, client_factory=client_factory)
+    agent = CafeAgent(settings, executor, llm=llm)
     limiter = RateLimiter(settings.chat_rate_limit_per_minute)
 
     app = FastAPI(
@@ -179,13 +179,13 @@ def create_app(settings: Settings | None = None, client_factory=None) -> FastAPI
     # -- chat ------------------------------------------------------------------
 
     @app.post("/api/chat", response_model=ChatResponse)
-    def chat(body: ChatRequest, request: Request):
+    async def chat(body: ChatRequest, request: Request):
         client_key = request.headers.get("x-forwarded-for", "").split(",")[0].strip() or (
             request.client.host if request.client else "unknown"
         )
         if not limiter.allow(client_key):
             raise HTTPException(429, "Too many messages — please wait a minute and try again.")
-        return agent.chat(body.message.strip(), body.history, body.shown_options)
+        return await agent.chat(body.message.strip(), body.history, body.shown_options, body.session_id)
 
     # -- orders ----------------------------------------------------------------
 

@@ -20,8 +20,19 @@
     modalContent: document.getElementById("modal-content"),
   };
 
+  function browserSessionId() {
+    let id = null;
+    try { id = sessionStorage.getItem("cf-session"); } catch { /* storage blocked */ }
+    if (!id || !/^[A-Za-z0-9_-]{8,64}$/.test(id)) {
+      id = (crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2) + Date.now().toString(36)).replace(/[^A-Za-z0-9_-]/g, "");
+      try { sessionStorage.setItem("cf-session", id); } catch { /* fine: id lives for this page */ }
+    }
+    return id;
+  }
+
   const state = {
-    history: [], // [{role: "user"|"assistant", text}] — sent back so the agent keeps context
+    sessionId: browserSessionId(),
+    history: [], // [{role: "user"|"assistant", text}] — used by the demo-mode fallback
     menu: new Map(), // id -> item
     cart: new Map(), // id -> qty (ids only; names/prices resolved from the server menu)
     quote: null,
@@ -67,15 +78,19 @@
       .join(", ");
   }
 
-  function activityHtml(calls, mode) {
-    if (!calls?.length) return "";
-    const who = mode === "gemini" ? "Gemini called" : "Demo mode ran";
+  function activityHtml(resp) {
+    const calls = resp.tool_calls || [];
+    const route = resp.agent_route || [];
+    if (!calls.length && route.length <= 1) return "";
+    const routeHtml = route.length ? `<div class="route">${route.map((a) => `<span class="agent-chip">${escapeHtml(a)}</span>`).join('<span class="arrow">→</span>')}</div>` : "";
     const items = calls
       .map(
-        (c) => `<li><code>${escapeHtml(c.name)}(${formatArgs(c.arguments)})</code> → <span class="${c.ok ? "ok" : "fail"}">${escapeHtml(c.summary)}</span></li>`
+        (c) => `<li>${c.agent ? `<b>${escapeHtml(c.agent)}</b> ` : ""}<code>${escapeHtml(c.name)}(${formatArgs(c.arguments)})</code> → <span class="${c.ok ? "ok" : "fail"}">${escapeHtml(c.summary)}</span></li>`
       )
       .join("");
-    return `<details class="activity"><summary>${who} ${calls.length} backend tool${calls.length > 1 ? "s" : ""}</summary><ol>${items}</ol></details>`;
+    const who = resp.mode === "gemini" ? "ADK agents" : "Demo mode";
+    const summary = calls.length ? `${who} called ${calls.length} backend tool${calls.length > 1 ? "s" : ""}` : "Routed by Barista AI";
+    return `<details class="activity" open><summary>${summary}</summary>${routeHtml}${items ? `<ol>${items}</ol>` : ""}</details>`;
   }
 
   const fillingDots = (score) => {
@@ -88,13 +103,15 @@
   function itemTags(item) {
     const marker = item.diet_marker || ((item.dietary_tags || []).includes("vegetarian") ? "veg" : "non-veg");
     const tags = [`<span class="tag ${MARKER_CLASS[marker] || ""}">${escapeHtml(marker)}</span>`];
+    if ((item.badges || []).includes("must-try")) tags.unshift('<span class="tag tag-must">must try</span>');
+    if ((item.serving || []).length) tags.push(`<span class="tag">${item.serving.map(escapeHtml).join(" / ")}</span>`);
     for (const t of item.dietary_tags || []) if (t !== "vegetarian") tags.push(`<span class="tag">${escapeHtml(t)}</span>`);
     return tags.join("");
   }
 
   function optionCard(combo, index, isAlt) {
     const lines = combo.items
-      .map((it) => `<li><span><span class="name">${escapeHtml(it.name)}</span><div class="tags">${itemTags(it)}</div></span><span class="price">${inr(it.price_inr)}</span></li>`)
+      .map((it) => `<li><span><span class="name">${escapeHtml(it.name)}</span><div class="tags">${itemTags(it)}</div></span><span class="price">${inr(it.price_inr)}${it.price_large_inr ? `<small class="large">L ${inr(it.price_large_inr)}</small>` : ""}</span></li>`)
       .join("");
     const badge = isAlt
       ? '<span class="badge badge-orange">Doesn\'t meet everything</span>'
@@ -139,7 +156,7 @@
     const meta = resp.mode === "gemini"
       ? `<span class="badge badge-green">Gemini${resp.model ? " · " + escapeHtml(resp.model) : ""}</span>`
       : `<span class="badge badge-orange">Demo mode · rule-based</span>`;
-    let html = `<div class="msg-meta">${meta}</div>${activityHtml(resp.tool_calls, resp.mode)}`;
+    let html = `<div class="msg-meta">${meta}</div>${activityHtml(resp)}`;
     html += `<div class="bubble">${renderMarkdown(resp.reply)}</div>`;
 
     if (resp.recommendations?.length) {
@@ -208,7 +225,7 @@
     const typing = addMessage("assistant", `<div class="bubble"><span class="typing"><span class="dots"><i></i><i></i><i></i></span>Checking the menu and kitchen queue…</span></div>`);
 
     try {
-      const resp = await api("/api/chat", { method: "POST", body: { message: text, history: state.history.slice(-20), shown_options: state.shownOptions || [] } });
+      const resp = await api("/api/chat", { method: "POST", body: { message: text, history: state.history.slice(-20), shown_options: state.shownOptions || [], session_id: state.sessionId } });
       typing.remove();
       renderAssistant(resp);
       rememberPreferences(resp);
