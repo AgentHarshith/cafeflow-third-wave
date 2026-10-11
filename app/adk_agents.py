@@ -74,7 +74,8 @@ def _shared_rules(cafe: CafeProfile) -> str:
         if cafe.allergen_data == "indicative"
         else ""
     )
-    return f"""Rules:
+    return f"""Voice: a world-class host at a premium specialty café — warm, assured and unhurried, with evocative but brief flavour notes. Never talk budget or "cheap" unless the customer raises money first.
+Rules:
 - Every item name, price, availability, dietary fact and wait time you mention must come from a tool result. Never invent menu items, prices, order IDs or tool results.
 - Never say an order has been placed. Orders exist only after the customer taps "Review & confirm" on a draft card.
 - Dietary requirements and allergies are hard constraints; never suggest anything that violates them.

@@ -14,8 +14,8 @@
 
   function signupModal() {
     app.openModal(`
-      <h3>Meet people here</h3>
-      <p class="modal-sub">Opt in to get matched with others in the café over a 3-question coffee quiz. Only your nickname and (optional) table number are shared.</p>
+      <h3>Meet someone here</h3>
+      <p class="modal-sub">Opt in to be introduced to kindred spirits in the café over three questions about coffee. Only your nickname and (optional) table are ever shared.</p>
       <label class="field">Nickname <input type="text" id="cn-nick" maxlength="24" placeholder="e.g. Oat Latte Fan" autocomplete="off" data-autofocus></label>
       <label class="field">Table number (optional) <input type="number" id="cn-table" min="1" max="200" placeholder="e.g. 4"></label>
       <label class="check"><input type="checkbox" id="cn-consent"> I agree to show my nickname and table to people I match with. I can stop sharing anytime.</label>
@@ -33,7 +33,7 @@
         await post("/api/connect/profile", { nickname, table: tableRaw ? Number(tableRaw) : null, consent: true });
         app.closeModal();
         startPolling();
-        app.agentNote("Connect People agent", `You're in as <b>${escapeHtml(nickname)}</b>. Tap <b>Connect me with people</b> (or just ask me) whenever you'd like to meet someone here.`, "badge-green");
+        app.agentNote("Connect People", `You're in as <b>${escapeHtml(nickname)}</b>. Tap <b>Connect me with people</b> (or just ask me) whenever you'd like to meet someone here.`);
         renderButton(true);
       } catch (e) {
         err.hidden = false; err.textContent = e.message;
@@ -64,7 +64,7 @@
     document.getElementById("cn-leave").addEventListener("click", async () => {
       await post("/api/connect/leave").catch(() => {});
       latest = null; stopPolling(); renderButton(false); app.closeModal();
-      app.agentNote("Connect People agent", "You've stopped sharing. Your nickname is no longer visible to anyone.");
+      app.agentNote("Connect People", "You've stopped sharing. Your nickname is no longer visible to anyone.");
     });
   }
 
@@ -72,7 +72,7 @@
     const questions = (latest && latest.questions) || [];
     const picked = {};
     app.openModal(`
-      <h3>3 quick questions</h3>
+      <h3>Three questions</h3>
       <p class="modal-sub">${intro}</p>
       ${questions.map((q) => `
         <div class="q-block"><h4>${escapeHtml(q.text)}</h4>
@@ -81,7 +81,7 @@
       <p class="form-error" id="q-error" hidden></p>
       <div class="modal-actions">
         <button class="btn" type="button" id="q-skip">Not now</button>
-        <button class="btn btn-primary" type="button" id="q-send" disabled>See my match</button>
+        <button class="btn btn-primary" type="button" id="q-send" disabled>Reveal my match</button>
       </div>`);
     const send = document.getElementById("q-send");
     document.querySelectorAll(".q-opt").forEach((b) => b.addEventListener("click", () => {
@@ -98,7 +98,7 @@
       try {
         await post("/api/connect/answer", { request_id: requestId, answers: picked });
         app.closeModal();
-        app.agentNote("Connect People agent", "Thanks! I'll show your match % here as soon as the other person answers too.", "badge-green");
+        app.agentNote("Connect People", "Thanks! I'll show your match % here as soon as the other person answers too.");
         poll();
       } catch (e) {
         const err = document.getElementById("q-error"); err.hidden = false; err.textContent = e.message;
@@ -109,12 +109,12 @@
   function inviteModal(invite) {
     const who = `${escapeHtml(invite.from.nickname)}${invite.from.table ? ` (table ${invite.from.table})` : ""}`;
     app.openModal(`
-      <div class="success-mark" aria-hidden="true">☕</div>
-      <h3>${who} wants to connect!</h3>
-      <p class="modal-sub">Answer 3 quick coffee questions to see how well you match. Only your nickname and table are shared.</p>
+      <svg class="two-stars" viewBox="0 0 120 46" aria-hidden="true"><circle cx="10" cy="30" r="4"/><circle cx="110" cy="16" r="4"/><path d="M14 29 Q60 2 106 17"/></svg>
+      <h3>${who} would like to connect</h3>
+      <p class="modal-sub">Answer three questions about coffee to see how well you match. Only your nickname and table are shared.</p>
       <div class="modal-actions">
         <button class="btn" type="button" id="inv-no">Not now</button>
-        <button class="btn btn-primary" type="button" id="inv-yes" data-autofocus>Answer 3 questions</button>
+        <button class="btn btn-primary" type="button" id="inv-yes" data-autofocus>Answer three questions</button>
       </div>`);
     document.getElementById("inv-yes").addEventListener("click", () => questionsModal(invite.request_id, `You and ${who} answer the same questions.`));
     document.getElementById("inv-no").addEventListener("click", async () => {
@@ -123,26 +123,58 @@
     });
   }
 
+  function confetti() {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const layer = document.createElement("div");
+    layer.className = "confetti";
+    const colors = ["#f3e6d0", "#5b74ff", "#c8336f", "#c9a46a", "#9db0ff"];
+    for (let i = 0; i < 70; i++) {
+      const p = document.createElement("i");
+      p.style.left = Math.random() * 100 + "vw";
+      p.style.background = colors[i % colors.length];
+      p.style.setProperty("--x", (Math.random() * 30 - 15) + "vw");
+      p.style.setProperty("--r", (Math.random() * 900 - 450) + "deg");
+      p.style.setProperty("--t", (2 + Math.random() * 1.6) + "s");
+      p.style.animationDelay = Math.random() * 0.4 + "s";
+      layer.appendChild(p);
+    }
+    document.body.appendChild(layer);
+    setTimeout(() => layer.remove(), 4200);
+  }
+
+  function countUp(el, target) {
+    const start = performance.now();
+    const step = (now) => {
+      const t = Math.min(1, (now - start) / 1100);
+      el.textContent = Math.round(target * (1 - Math.pow(1 - t, 3)));
+      if (t < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }
+
   function matchModal(m) {
     const who = `${escapeHtml(m.with_profile.nickname)}${m.with_profile.table ? ` · table ${m.with_profile.table}` : ""}`;
-    const shared = m.shared.length ? `You both picked: ${m.shared.map(escapeHtml).join(", ")}.` : "Different picks — great conversation starter!";
+    const shared = m.shared.length ? `You both chose ${m.shared.map(escapeHtml).join(" and ").toLowerCase()}.` : "Different tastes — the best conversations start there.";
     app.openModal(`
-      <div class="success-mark" aria-hidden="true">🎉</div>
-      <h3>You've got a match!</h3>
-      <div class="match-big">${m.percent}%</div>
-      <p class="modal-sub">with <b>${who}</b>. ${shared}</p>
-      <div class="modal-note">💬 ${escapeHtml(m.icebreaker)}</div>
-      <div class="modal-actions"><button class="btn btn-primary" type="button" data-close data-autofocus>Say hi ☺</button></div>`);
-    app.agentNote("Connect People agent", `🎉 You got a <b>${m.percent}% match</b> with <b>${who}</b>. ${shared}<br>Icebreaker: “${escapeHtml(m.icebreaker)}”`, "badge-green");
+      <svg class="two-stars" viewBox="0 0 120 46" aria-hidden="true"><circle cx="10" cy="30" r="4"/><circle cx="110" cy="16" r="4"/><path d="M14 29 Q60 2 106 17"/></svg>
+      <p class="modal-sub" style="margin:0">A kindred spirit, with</p>
+      <h3>${who}</h3>
+      <div class="match-big"><span id="match-num">0</span>%</div>
+      <p class="modal-sub">${shared}</p>
+      <div class="modal-note"><em>${escapeHtml(m.icebreaker)}</em></div>
+      <div class="modal-actions"><button class="btn btn-primary" type="button" data-close data-autofocus>Say hello</button></div>`);
+    countUp(document.getElementById("match-num"), m.percent);
+    confetti();
+    app.agentNote("Connect People", `A <b>${m.percent}% match</b> with <b>${who}</b>. ${shared}<br><em>“${escapeHtml(m.icebreaker)}”</em>`);
   }
 
   // ---------------------------------------------------------------- flow
 
   async function requestConnect() {
     let r;
-    try { r = await post("/api/connect/request"); } catch (e) { app.agentNote("Connect People agent", escapeHtml(e.message)); return; }
+    try { r = await post("/api/connect/request"); } catch (e) { app.agentNote("Connect People", escapeHtml(e.message)); return; }
     if (r.needs_signup) return signupModal();
-    app.agentNote("Connect People agent", `I've let <b>${r.people_notified}</b> ${r.people_notified === 1 ? "person" : "people"} here know you'd like to connect. Answer 3 quick questions — your match % appears when someone answers.`, "badge-green");
+    app.agentNote("Connect People", `I've let <b>${r.people_notified}</b> ${r.people_notified === 1 ? "person" : "people"} here know you'd like to connect. Answer 3 quick questions — your match % appears when someone answers.`);
     await poll();
     if (!r.answered) questionsModal(r.request_id, "Your answers are matched against everyone who responds.");
   }
@@ -163,7 +195,7 @@
 
   function renderButton(signedUp) {
     const btn = document.getElementById("connect-btn");
-    if (btn) btn.querySelector(".label").textContent = signedUp ? "Connect me with people" : "Meet people";
+    if (btn) btn.querySelector(".label").textContent = signedUp ? "Connect me with people" : "Meet people here";
     const panel = document.getElementById("connect-panel-btn");
     if (panel) panel.hidden = !signedUp;
   }

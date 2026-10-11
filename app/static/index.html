@@ -5,77 +5,132 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>CaféFlow AI</title>
   <meta name="description" content="Your café visit, intelligently coordinated." />
-  <meta name="theme-color" content="#F8F3EC" />
+  <meta name="theme-color" content="#070B26" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Unbounded:wght@400;500;600&family=Hanken+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/static/styles.css" />
   {{THEME_STYLE}}
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%233B2A20'/%3E%3Cpath d='M9 13h11v5a5 5 0 0 1-5 5h-1a5 5 0 0 1-5-5z' fill='%23F8F3EC'/%3E%3Cpath d='M20 14h1.5a2.5 2.5 0 0 1 0 5H20' stroke='%23F8F3EC' stroke-width='1.6' fill='none'/%3E%3C/svg%3E" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%23070B26'/%3E%3Cpath d='M9 13h11v5a5 5 0 0 1-5 5h-1a5 5 0 0 1-5-5z' fill='none' stroke='%23F3E6D0' stroke-width='1.6'/%3E%3Cpath d='M20 14h1.5a2.5 2.5 0 0 1 0 5H20' stroke='%23F3E6D0' stroke-width='1.6' fill='none'/%3E%3C/svg%3E" />
 </head>
 <body class="customer">
-  <header class="topbar">
-    <a class="brand" href="/" aria-label="CaféFlow AI home">
-      <span class="{{BRAND_MARK_CLASS}}" aria-hidden="true">{{BRAND_MARK}}</span>
-      <span class="brand-text">
-        <span class="brand-name">CaféFlow AI</span>
-        <span class="brand-tag">{{BRAND_FOR}}Your café visit, intelligently coordinated.</span>
-      </span>
-    </a>
-    <div class="topbar-actions">
-      <span id="ai-status" class="status-pill status-checking" role="status" title="Checking Gemini connection" data-short="Checking…">
-        <span class="dot" aria-hidden="true"></span><span class="label">Checking AI…</span>
-      </span>
-      <button id="connect-btn" class="link-btn connect-btn" type="button" title="Opt-in: meet other people in the café"><span aria-hidden="true">👥 </span><span class="label">Meet people</span></button>
-      <button id="connect-panel-btn" class="link-btn" type="button" hidden title="Your matches and sharing settings">Matches</button>
-      <a class="link-btn" href="/staff">Staff<span class="long"> dashboard</span></a>
-    </div>
-  </header>
+  <div class="atmos" aria-hidden="true"><i class="glow g1"></i><i class="glow g2"></i><i class="glow g3"></i></div>
+  <div class="grain" aria-hidden="true"></div>
 
-  <div class="demo-strip">{{DISCLAIMER}}</div>
+  <div class="shell">
+    <!-- ───────────── Left page: the stage ───────────── -->
+    <aside class="stage" aria-label="CaféFlow AI">
+      <header class="stage-top">
+        <a class="brand" href="/" aria-label="CaféFlow AI home">
+          <span class="{{BRAND_MARK_CLASS}}" aria-hidden="true">{{BRAND_MARK}}</span>
+          <span class="brand-text">
+            <span class="brand-name">CaféFlow <em>AI</em></span>
+            <span class="brand-tag">{{BRAND_FOR}}Your café visit, intelligently coordinated.</span>
+          </span>
+        </a>
+        <span id="ai-status" class="status-pill status-checking" role="status" title="Checking Gemini connection" data-short="Checking…">
+          <span class="dot" aria-hidden="true"></span><span class="label">Checking AI…</span>
+        </span>
+      </header>
 
-  <main class="layout">
-    <section class="chat" aria-label="Chat with CaféFlow AI">
-      <div id="messages" class="messages" aria-live="polite">
-        <article class="msg assistant welcome">
-          <div class="bubble">
-            <p class="welcome-title">{{WELCOME_TITLE}}</p>
-            <p>{{WELCOME_BODY}}</p>
-            <div class="chips" id="quick-prompts">{{QUICK_PROMPTS}}</div>
-          </div>
-        </article>
+      <div class="hello">
+        <p class="eyebrow reveal" style="--d:0">The hour of the third wave</p>
+        <h1 class="greet reveal" style="--d:1"><span id="greet-word">Good evening</span>,<br /><em>what shall we pour?</em></h1>
+        <p class="lede reveal" style="--d:2">{{WELCOME_BODY}}</p>
       </div>
 
-      <form id="composer" class="composer" autocomplete="off">
-        <label for="input" class="sr-only">Message</label>
-        <textarea id="input" rows="1" maxlength="800" placeholder="e.g. I'm vegetarian, have ₹250 and need something filling in 10 minutes"></textarea>
-        <button id="send" class="send-btn" type="submit" aria-label="Send message">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        </button>
-      </form>
-    </section>
+      <figure class="constellation reveal" style="--d:3" aria-label="Your AI hospitality team">
+        <svg viewBox="0 0 420 250" role="img" aria-labelledby="const-title">
+          <title id="const-title">Barista AI routes each request to a specialist agent</title>
+          <defs>
+            <radialGradient id="halo" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stop-color="#9DB0FF" stop-opacity=".95" />
+              <stop offset="45%" stop-color="#4C66FF" stop-opacity=".35" />
+              <stop offset="100%" stop-color="#4C66FF" stop-opacity="0" />
+            </radialGradient>
+          </defs>
+          <g class="links">
+            <path class="link" data-to="discovery" d="M210 52 Q120 70 62 158" />
+            <path class="link" data-to="ordering" d="M210 52 Q160 120 138 206" />
+            <path class="link" data-to="connect" d="M210 52 L210 140" />
+            <path class="link" data-to="wait" d="M210 52 Q260 120 282 206" />
+            <path class="link" data-to="feedback" d="M210 52 Q300 70 358 158" />
+          </g>
+          <g class="node router" data-agent="router" transform="translate(210 52)"><circle class="halo" r="26" /><circle class="ring" r="11" /><circle class="core" r="4.5" /><text y="-20">BARISTA AI</text></g>
+          <g class="node" data-agent="discovery" transform="translate(62 158)"><circle class="halo" r="22" /><circle class="core" r="3.5" /><text y="24">DISCOVERY</text></g>
+          <g class="node" data-agent="ordering" transform="translate(138 206)"><circle class="halo" r="22" /><circle class="core" r="3.5" /><text y="24">ORDERING</text></g>
+          <g class="node" data-agent="connect" transform="translate(210 140)"><circle class="halo" r="22" /><circle class="core" r="3.5" /><text y="24">CONNECT</text></g>
+          <g class="node" data-agent="wait" transform="translate(282 206)"><circle class="halo" r="22" /><circle class="core" r="3.5" /><text y="24">WAIT-TIME</text></g>
+          <g class="node" data-agent="feedback" transform="translate(358 158)"><circle class="halo" r="22" /><circle class="core" r="3.5" /><text y="24">FEEDBACK</text></g>
+        </svg>
+        <figcaption id="const-caption">Your hospitality team · six Gemini agents on Google ADK</figcaption>
+      </figure>
 
-    <aside id="cart" class="cart" aria-label="Your order">
-      <div class="cart-head">
-        <h2>Your order</h2>
-        <button id="cart-close" class="icon-btn cart-close" type="button" aria-label="Close cart">✕</button>
-      </div>
-      <div id="cart-body" class="cart-body"></div>
-      <div class="cart-foot">
-        <div class="cart-summary" id="cart-summary"></div>
-        <button id="review-btn" class="btn btn-primary btn-block" type="button" disabled>Review order</button>
-        <p class="fine">Prices and wait are calculated by the server. Wait times are approximate.</p>
-      </div>
+      <footer class="stage-foot reveal" style="--d:4">
+        <div class="stage-actions">
+          <button id="connect-btn" class="ghost-btn" type="button" title="Opt-in: meet other people in the café"><span class="label">Meet people here</span></button>
+          <button id="connect-panel-btn" class="ghost-btn" type="button" hidden title="Your matches and sharing settings">Matches</button>
+          <a class="ghost-btn" href="/staff">Staff</a>
+        </div>
+        <p class="fine-print">{{DISCLAIMER}}</p>
+      </footer>
     </aside>
-  </main>
 
-  <button id="cart-fab" class="cart-fab" type="button" hidden>
-    <span id="cart-fab-label">Cart</span><span class="fab-cta">Review →</span>
-  </button>
+    <!-- ───────────── Right page: the menu paper ───────────── -->
+    <main class="paper" aria-label="Menu and conversation">
+      <div class="paper-head">
+        <div class="pill-row" id="collection-tabs" role="tablist" aria-label="Browse the menu"></div>
+        <button id="cart-fab" class="order-btn" type="button" hidden>
+          <span id="cart-fab-label">Your order</span><span class="fab-cta">View</span>
+        </button>
+      </div>
+
+      <section class="collection" aria-label="The collection">
+        <div class="collection-track" id="collection"></div>
+      </section>
+
+      <section class="chat" aria-label="Conversation with CaféFlow AI">
+        <div id="messages" class="messages" aria-live="polite">
+          <article class="msg assistant welcome">
+            <div class="byline"><span>Barista AI</span></div>
+            <div class="bubble">
+              <p class="welcome-title">{{WELCOME_TITLE}}</p>
+              <div class="chips" id="quick-prompts">{{QUICK_PROMPTS}}</div>
+            </div>
+          </article>
+        </div>
+
+        <form id="composer" class="composer" autocomplete="off">
+          <label for="input" class="sr-only">Message</label>
+          <textarea id="input" rows="1" maxlength="800" placeholder="Tell us your mood, your moment, your minutes…"></textarea>
+          <button id="send" class="send-btn" type="submit" aria-label="Send message">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h13M13 6l6 6-6 6" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+        </form>
+      </section>
+    </main>
+  </div>
+
+  <!-- Order slip (drawer) -->
+  <div id="cart-scrim" class="scrim" hidden></div>
+  <aside id="cart" class="cart docket" aria-label="Your order">
+    <div class="cart-head">
+      <h2>Your order</h2>
+      <button id="cart-close" class="icon-btn" type="button" aria-label="Close order">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+    <div id="cart-body" class="cart-body"></div>
+    <div class="cart-foot">
+      <div class="cart-summary" id="cart-summary"></div>
+      <button id="review-btn" class="btn btn-primary btn-block" type="button" disabled>Review order</button>
+      <p class="fine">Prices and wait times are calculated by the café's server. Times are approximate.</p>
+    </div>
+  </aside>
 
   <div id="modal" class="modal" hidden>
     <div class="modal-backdrop" data-close></div>
-    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <div class="modal-card" role="dialog" aria-modal="true">
       <div id="modal-content"></div>
     </div>
   </div>
@@ -83,6 +138,7 @@
   <script>window.CAFE = {{CAFE_JSON}};</script>
   <script src="/static/common.js"></script>
   <script src="/static/app.js"></script>
+  <script src="/static/stage.js"></script>
   <script src="/static/connect.js"></script>
 </body>
 </html>

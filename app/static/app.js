@@ -90,12 +90,14 @@
       .join("");
     const who = resp.mode === "gemini" ? "ADK agents" : "Demo mode";
     const summary = calls.length ? `${who} called ${calls.length} backend tool${calls.length > 1 ? "s" : ""}` : "Routed by Barista AI";
-    return `<details class="activity" open><summary>${summary}</summary>${routeHtml}${items ? `<ol>${items}</ol>` : ""}</details>`;
+    return `<details class="activity"><summary>${summary}</summary>${routeHtml}${items ? `<ol>${items}</ol>` : ""}</details>`;
   }
 
+  const FILLING_WORDS = ["", "light", "light", "satisfying", "hearty", "a full meal"];
   const fillingDots = (score) => {
-    const capped = Math.min(score, 5);
-    return `<span class="filling" title="Filling score ${score}">${"●".repeat(capped)}<span class="off">${"●".repeat(5 - capped)}</span></span>`;
+    const capped = Math.max(1, Math.min(score, 5));
+    const bars = Array.from({ length: 5 }, (_, i) => `<i class="${i < capped ? "" : "off"}"></i>`).join("");
+    return `<span class="filling" title="How filling">${bars}<span class="filling-label">${FILLING_WORDS[capped]}</span></span>`;
   };
 
   const MARKER_CLASS = { veg: "tag-veg", egg: "tag-egg", "non-veg": "tag-nonveg" };
@@ -114,27 +116,27 @@
       .map((it) => `<li><span><span class="name">${escapeHtml(it.name)}</span><div class="tags">${itemTags(it)}</div></span><span class="price">${inr(it.price_inr)}${it.price_large_inr ? `<small class="large">L ${inr(it.price_large_inr)}</small>` : ""}</span></li>`)
       .join("");
     const badge = isAlt
-      ? '<span class="badge badge-orange">Doesn\'t meet everything</span>'
+      ? '<span class="badge badge-orange">Close, not perfect</span>'
       : combo.fits_deadline
-        ? '<span class="badge badge-green">✓ Meets all constraints</span>'
+        ? '<span class="badge badge-green">A perfect fit</span>'
         : "";
     const unmet = isAlt && combo.unmet_constraints?.length
       ? `<ul class="unmet">${combo.unmet_constraints.map((u) => `<li>${escapeHtml(u)}</li>`).join("")}</ul>`
       : "";
-    const left = combo.budget_left_inr != null && combo.budget_left_inr >= 0 ? `<div class="stat"><b>${inr(combo.budget_left_inr)}</b><span>budget left</span></div>` : "";
+    const left = combo.budget_left_inr != null && combo.budget_left_inr >= 0 ? `<div class="stat"><b>${inr(combo.budget_left_inr)}</b><span>to spare</span></div>` : "";
     return `
       <div class="option ${isAlt ? "alt" : ""}">
-        <div class="option-top"><span class="option-rank">${isAlt ? "Alternative" : "Option " + (index + 1)}</span>${badge}</div>
+        <div class="option-top"><span class="option-rank">${isAlt ? "An alternative" : "No. " + (index + 1)}</span>${badge}</div>
         <ul class="option-items">${lines}</ul>
         ${unmet}
         <div class="option-stats">
           <div class="stat"><b>${inr(combo.total_price_inr)}</b><span>total</span></div>
-          <div class="stat"><b>~${combo.estimated_wait_minutes} min</b><span>est. ready</span></div>
+          <div class="stat"><b>~${combo.estimated_wait_minutes}<small> min</small></b><span>ready in</span></div>
           ${left}
         </div>
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+        <div class="option-foot">
           ${fillingDots(combo.combined_filling_score)}
-          <button class="btn btn-sm ${isAlt ? "" : "btn-green"}" type="button" data-add='${escapeHtml(JSON.stringify(combo.item_ids))}'>Add to order</button>
+          <button class="btn btn-sm ${isAlt ? "" : "btn-primary"}" type="button" data-add='${escapeHtml(JSON.stringify(combo.item_ids))}'>Add to order</button>
         </div>
       </div>`;
   }
@@ -143,27 +145,28 @@
     return `
       <div class="option">
         <div class="option-top"><span class="option-rank">${escapeHtml(item.category)}</span>${fillingDots(item.filling_score)}</div>
-        <ul class="option-items"><li><span><span class="name">${escapeHtml(item.name)}</span><div class="tags">${itemTags(item)}</div></span><span class="price">${inr(item.price_inr)}</span></li></ul>
+        <ul class="option-items"><li><span><span class="name">${escapeHtml(item.name)}</span><div class="tags">${itemTags(item)}</div></span><span class="price">${inr(item.price_inr)}${item.price_large_inr ? `<small class="large">L ${inr(item.price_large_inr)}</small>` : ""}</span></li></ul>
         <div class="option-stats">
           <div class="stat"><b>${item.preparation_time_minutes} min</b><span>prep time</span></div>
-          <div class="stat"><b>${item.sweetness_level ?? 0}/5</b><span>sweetness</span></div>
+          <div class="stat"><b>${["none", "a hint", "gentle", "balanced", "sweet", "indulgent"][item.sweetness_level ?? 0]}</b><span>sweetness</span></div>
         </div>
-        <button class="btn btn-sm btn-green" type="button" data-add='${escapeHtml(JSON.stringify([item.id]))}'>Add to order</button>
+        <div class="option-foot">${fillingDots(item.filling_score)}<button class="btn btn-sm btn-primary" type="button" data-add='${escapeHtml(JSON.stringify([item.id]))}'>Add to order</button></div>
       </div>`;
   }
 
   function renderAssistant(resp) {
+    const route = (resp.agent_route || []).length ? resp.agent_route.map(escapeHtml).join(" → ") : "Barista AI";
     const meta = resp.mode === "gemini"
-      ? `<span class="badge badge-green">Gemini${resp.model ? " · " + escapeHtml(resp.model) : ""}</span>`
-      : `<span class="badge badge-orange">Demo mode · rule-based</span>`;
-    let html = `<div class="msg-meta">${meta}</div>${activityHtml(resp)}`;
+      ? `<span>${route}</span><span class="badge">Gemini</span>`
+      : `<span>Barista AI</span><span class="badge badge-orange">Demo mode · rule-based</span>`;
+    let html = `<div class="byline">${meta}</div>${activityHtml(resp)}`;
     html += `<div class="bubble">${renderMarkdown(resp.reply)}</div>`;
 
     if (resp.recommendations?.length) {
-      html += `<div class="cards-label">Options from the menu engine</div><div class="cards">${resp.recommendations.map((c, i) => optionCard(c, i, false)).join("")}</div>`;
+      html += `<div class="cards-label">Curated for you</div><div class="cards">${resp.recommendations.map((c, i) => optionCard(c, i, false)).join("")}</div>`;
     }
     if (resp.alternatives?.length) {
-      html += `<div class="cards-label">Closest alternatives — not fully compliant</div><div class="cards">${resp.alternatives.map((c, i) => optionCard(c, i, true)).join("")}</div>`;
+      html += `<div class="cards-label">Closest alternatives</div><div class="cards">${resp.alternatives.map((c, i) => optionCard(c, i, true)).join("")}</div>`;
     }
     if (!resp.recommendations?.length && !resp.alternatives?.length && resp.menu_items?.length) {
       html += `<div class="cards-label">From the menu</div><div class="cards">${resp.menu_items.map(menuItemCard).join("")}</div>`;
@@ -222,12 +225,14 @@
     autoGrow();
 
     addMessage("user", `<div class="bubble">${displayHtml || escapeHtml(text)}</div>`);
-    const typing = addMessage("assistant", `<div class="bubble"><span class="typing"><span class="dots"><i></i><i></i><i></i></span>Checking the menu and kitchen queue…</span></div>`);
+    if (window.CFStage) window.CFStage.listen();
+    const typing = addMessage("assistant", `<div class="byline"><span>Barista AI</span></div><div class="bubble"><span class="typing"><span class="dots"><i></i><i></i><i></i></span>Curating…</span></div>`);
 
     try {
       const resp = await api("/api/chat", { method: "POST", body: { message: text, history: state.history.slice(-20), shown_options: state.shownOptions || [], session_id: state.sessionId, ...extra } });
       typing.remove();
       renderAssistant(resp);
+      if (window.CFStage) window.CFStage.play(resp.agent_route);
       rememberPreferences(resp);
       if (resp.connect && window.CFConnect) window.CFConnect.handleAction(resp.connect);
       state.history.push({ role: "user", text }, { role: "assistant", text: resp.reply.slice(0, 3500) });
@@ -400,7 +405,7 @@
       showSuccess(order);
       addMessage(
         "assistant",
-        `<div class="msg-meta"><span class="badge badge-green">Order system</span></div><div class="bubble">✅ Order <b>${escapeHtml(order.order_id)}</b> confirmed by the café backend — ${inr(order.total_inr)}, estimated ready around <b>${timeOf(order.estimated_ready_at)}</b> (~${order.estimated_wait_minutes} min).</div>`,
+        `<div class="byline"><span>The café</span></div><div class="bubble">Order <b>${escapeHtml(order.order_id)}</b> confirmed by the café backend — ${inr(order.total_inr)}, estimated ready around <b>${timeOf(order.estimated_ready_at)}</b> (~${order.estimated_wait_minutes} min).</div>`,
         "system"
       );
       state.history.push({ role: "assistant", text: `Order ${order.order_id} was placed by the customer (total ₹${order.total_inr}, ~${order.estimated_wait_minutes} min).` });
@@ -414,7 +419,7 @@
 
   function showSuccess(order) {
     openModal(`
-      <div class="success-mark" aria-hidden="true">✓</div>
+      <svg class="success-mark" viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="30"/><path d="M20 33l8 8 16-17"/></svg>
       <h3>Order placed</h3>
       <p class="modal-sub">Show this order ID at the counter.</p>
       <div class="order-id">${escapeHtml(order.order_id)}</div>
@@ -452,7 +457,7 @@
     const add = e.target.closest("[data-add]");
     if (add) {
       addToCart(JSON.parse(add.dataset.add));
-      add.textContent = "Added ✓";
+      add.textContent = "Added";
       setTimeout(() => { add.textContent = "Add to order"; }, 1400);
       return;
     }
@@ -491,8 +496,8 @@
     saveTracked(state.tracked);
   }
 
-  function agentNote(label, html, cls = "") {
-    addMessage("assistant", `<div class="msg-meta"><span class="badge ${cls}">${escapeHtml(label)}</span></div><div class="bubble">${html}</div>`, "system");
+  function agentNote(label, html) {
+    addMessage("assistant", `<div class="byline"><span>${escapeHtml(label)}</span></div><div class="bubble">${html}</div>`, "system");
   }
 
   async function pollOrders() {
@@ -503,11 +508,11 @@
       const o = data.order;
       if (o.delayed_at && o.delayed_at !== t.delayedAt) {
         t.delayedAt = o.delayed_at;
-        agentNote("Wait-time agent", `⏱️ ${escapeHtml(o.delay_message || "Your order is running a little late.")}<br><span class="muted-line">Order ${escapeHtml(id)} · new estimate around <b>${timeOf(o.estimated_ready_at)}</b></span>`, "badge-orange");
+        agentNote("Wait-time agent", `${escapeHtml(o.delay_message || "Your order is running a little late.")}<br><span class="muted-line">Order ${escapeHtml(id)} · new estimate around <b>${timeOf(o.estimated_ready_at)}</b></span>`, "badge-orange");
       }
       if (o.status !== t.status) {
         t.status = o.status;
-        if (o.status === "ready") agentNote("Order update", `🔔 Order <b>${escapeHtml(id)}</b> is <b>ready for pickup</b>!`, "badge-green");
+        if (o.status === "ready") agentNote("Order update", `Order <b>${escapeHtml(id)}</b> is <b>ready for pickup</b>. Enjoy.`, "badge-green");
         if (o.status === "cancelled") { agentNote("Order update", `Order ${escapeHtml(id)} was cancelled by the café.`); t.done = true; }
       }
       if (o.status === "completed") {
@@ -518,14 +523,14 @@
     }
   }
 
-  const FEEDBACK_FACES = [[1, "😞"], [2, "🙁"], [3, "😐"], [4, "🙂"], [5, "😍"]];
+  const FEEDBACK_SCALE = [[1, "Disappointing"], [2, "Underwhelming"], [3, "Fine"], [4, "Lovely"], [5, "Exquisite"]];
   const FEEDBACK_CHIPS = ["Perfect", "Great taste", "Took too long", "Too sweet", "Not hot enough", "Friendly staff", "Wrong item", "Pricey"];
 
   function openFeedback(orderId, items) {
     openModal(`
       <h3>How was it?</h3>
       <p class="modal-sub">Order ${escapeHtml(orderId)} · ${escapeHtml(items || "")}</p>
-      <div class="faces" role="radiogroup" aria-label="Rating">${FEEDBACK_FACES.map(([v, f]) => `<button type="button" class="face" data-rate="${v}" aria-label="${v} out of 5">${f}</button>`).join("")}</div>
+      <div class="fb-scale" role="radiogroup" aria-label="Rating">${FEEDBACK_SCALE.map(([v, w]) => `<button type="button" class="fb-step" data-rate="${v}" aria-label="${v} of 5, ${w}"><b>${v}</b><span>${w}</span></button>`).join("")}</div>
       <div class="chips fb-chips">${FEEDBACK_CHIPS.map((c) => `<button type="button" class="chip" data-chip="${escapeHtml(c)}">${escapeHtml(c)}</button>`).join("")}</div>
       <textarea id="fb-comment" class="fb-comment" rows="2" maxlength="600" placeholder="Anything else? (optional)"></textarea>
       <div class="modal-actions">
@@ -534,9 +539,9 @@
       </div>`);
     let rating = null;
     const chips = new Set();
-    els.modalContent.querySelectorAll(".face").forEach((b) => b.addEventListener("click", () => {
+    els.modalContent.querySelectorAll(".fb-step").forEach((b) => b.addEventListener("click", () => {
       rating = Number(b.dataset.rate);
-      els.modalContent.querySelectorAll(".face").forEach((x) => x.classList.toggle("on", x === b));
+      els.modalContent.querySelectorAll(".fb-step").forEach((x) => x.classList.toggle("on", x === b));
       document.getElementById("fb-send").disabled = false;
     }));
     els.modalContent.querySelectorAll("[data-chip]").forEach((b) => b.addEventListener("click", () => {
@@ -547,14 +552,14 @@
     document.getElementById("fb-send").addEventListener("click", () => {
       const comment = document.getElementById("fb-comment").value.trim();
       closeModal();
-      const face = FEEDBACK_FACES.find(([v]) => v === rating)[1];
+      const word = FEEDBACK_SCALE.find(([v]) => v === rating)[1];
       const text = `Feedback for order ${orderId}: ${rating}/5${chips.size ? " — " + [...chips].join(", ") : ""}${comment ? `. ${comment}` : ""}`;
-      const display = `${face} <b>${rating}/5</b>${chips.size ? " · " + [...chips].map(escapeHtml).join(" · ") : ""}${comment ? `<br>“${escapeHtml(comment)}”` : ""}`;
+      const display = `<b>${word}</b> · ${rating}/5${chips.size ? " · " + [...chips].map(escapeHtml).join(" · ") : ""}${comment ? `<br>“${escapeHtml(comment)}”` : ""}`;
       sendMessage(text, { feedback_form: { order_id: orderId, rating, chips: [...chips], comment: comment || null } }, display);
     });
   }
 
-  window.CFApp = { openModal, closeModal, addMessage, agentNote, sendMessage, state, isModalOpen: () => !els.modal.hidden };
+  window.CFApp = { openModal, closeModal, addMessage, agentNote, sendMessage, addToCart, state, isModalOpen: () => !els.modal.hidden };
 
   // ---------------------------------------------------------------- init
 

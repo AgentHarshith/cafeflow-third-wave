@@ -9,25 +9,15 @@
     "disclaimer": "Unofficial concept demo built at the Google Cloud Builder Pop-Up — not an official Third Wave Coffee app · no real orders are sent · no payments taken",
     "logo": "/static/brands/third_wave/logo.png",
     "logo_alt": "Third Wave Coffee",
-    "theme": {
-      "--bg": "#FAF8F5",
-      "--surface": "#FFFFFF",
-      "--surface-2": "#EFEBE6",
-      "--ink": "#2D3C4B",
-      "--ink-2": "#55606B",
-      "--ink-3": "#8A949D",
-      "--line": "#E2DDD6",
-      "--espresso": "#2D3C4B",
-      "--orange-soft": "#F1ECE6",
-      "--logo-bg": "#FFFFFF"
-    },
-    "welcome_title": "Hi! I'm CaféFlow, your ordering companion for Third Wave Coffee.",
-    "welcome_body": "Tell me your budget, diet and how much time you have — I'll check the menu plus the queue at the bar and kitchen, and find what will actually be ready in time.",
+    "theme": {},
+    "welcome_title": "Tell me the moment — I'll curate the cup, and have it ready the minute you are.",
+    "welcome_body": "A private hospitality team of six AI agents, on hand for your visit to Third Wave Coffee — they read the room, the menu and the bar's queue, so what you order arrives exactly when you want it.",
     "quick_prompts": [
-      "I'm vegetarian, have ₹250, and need something filling in 10 minutes.",
-      "I have ₹500 for a coffee and a bite — ready in 10 minutes.",
-      "Recommend a cold coffee under ₹300.",
-      "What are your must-try drinks that aren't too sweet?"
+      "Surprise me with tonight's most extraordinary cup.",
+      "I have a call in fifteen minutes — what's worth savouring?",
+      "Pair a signature special with something indulgent.",
+      "Something refined, not too sweet, served iced.",
+      "Introduce me to someone here over coffee."
     ],
     "allergen_data": "indicative",
     "data_note": "Veg/non-veg markers and prices come from Third Wave Coffee's printed menu; vegan, dairy-free, gluten-free and allergen details are CaféFlow's indicative estimates from standard recipes, not official Third Wave data.",

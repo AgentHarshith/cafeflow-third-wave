@@ -82,7 +82,7 @@
     const prefs = order.customer_preferences || {};
     const tags = [prefs.dietary_preference, prefs.deadline_minutes ? `needs it in ${prefs.deadline_minutes} min` : null]
       .filter(Boolean).map((p) => `<span class="tag">${escapeHtml(p)}</span>`);
-    if (order.delay_minutes) tags.push(`<span class="tag tag-delay">⏱ +${order.delay_minutes} min · customer notified</span>`);
+    if (order.delay_minutes) tags.push(`<span class="tag tag-delay">Delayed +${order.delay_minutes} min · guest notified</span>`);
     const actions = (ACTIONS[order.status] || [])
       .map(([status, label, cls]) => `<button class="btn btn-sm ${cls}" type="button" data-order="${escapeHtml(order.order_id)}" data-status="${status}">${label}</button>`)
       .join("");
@@ -190,7 +190,7 @@
       showError("");
       await loadMenu();
       const saved = document.querySelector(`[data-item="${CSS.escape(id)}"] [data-save]`);
-      if (saved) { saved.textContent = "Saved ✓"; setTimeout(() => { saved.textContent = "Save"; }, 1500); }
+      if (saved) { saved.textContent = "Saved"; setTimeout(() => { saved.textContent = "Save"; }, 1500); }
     } catch (err) {
       btn.disabled = false;
       showError(`${id}: ${err.message}`);
@@ -199,7 +199,7 @@
 
   // ---------------------------------------------------------------- room
 
-  const SENT = { positive: "🙂", neutral: "😐", negative: "🙁" };
+  const SENT = { positive: "Delighted", neutral: "Neutral", negative: "Unhappy" };
 
   async function loadRoom() {
     const room = await staffApi("/api/staff/room");
@@ -207,11 +207,11 @@
     $("room-stats").innerHTML = `
       <div class="stat-tile"><div class="k">Avg rating</div><div class="v">${fb.average_rating ?? "–"}<small> / 5</small></div></div>
       <div class="stat-tile"><div class="k">Feedback</div><div class="v">${fb.count}</div></div>
-      <div class="stat-tile"><div class="k">Mood</div><div class="v"><small>🙂 ${fb.sentiment.positive || 0} · 😐 ${fb.sentiment.neutral || 0} · 🙁 ${fb.sentiment.negative || 0}</small></div></div>
+      <div class="stat-tile"><div class="k">Mood</div><div class="v">${fb.sentiment.positive || 0}<small> delighted · ${fb.sentiment.neutral || 0} neutral · ${fb.sentiment.negative || 0} unhappy</small></div></div>
       <div class="stat-tile"><div class="k">Unmet requests</div><div class="v">${dm.unmet}<small> of ${dm.requests} (${dm.window_hours}h)</small></div></div>`;
     const themes = Object.entries(fb.themes).map(([t, n]) => `<span class="tag">${escapeHtml(t.replace("_", " "))} · ${n}</span>`).join("");
     $("room-feedback").innerHTML = (themes ? `<div class="tags" style="margin-bottom:10px">${themes}</div>` : "") + (fb.latest.length
-      ? fb.latest.map((f) => `<div class="fb-row"><span class="fb-face">${SENT[f.sentiment] || "😐"}</span><div><b>${f.rating ? f.rating + "/5" : "—"}</b> ${f.order_id ? `<span class="muted-line">${escapeHtml(f.order_id)}</span>` : ""}<div>${escapeHtml(f.comment || (f.themes || []).join(", ") || "No comment")}</div></div></div>`).join("")
+      ? fb.latest.map((f) => `<div class="fb-row"><span class="fb-face ${f.sentiment || ""}">${SENT[f.sentiment] || "Neutral"}</span><div><b>${f.rating ? f.rating + "/5" : "—"}</b> ${f.order_id ? `<span class="muted-line">${escapeHtml(f.order_id)}</span>` : ""}<div>${escapeHtml(f.comment || (f.themes || []).join(", ") || "No comment")}</div></div></div>`).join("")
       : `<p class="column-empty">No feedback yet.</p>`);
     $("room-demand").innerHTML = dm.top_unmet.length
       ? dm.top_unmet.map((d) => `<div class="fb-row"><span class="fb-face">${d.count}×</span><div>${escapeHtml(d.request)}</div></div>`).join("")
