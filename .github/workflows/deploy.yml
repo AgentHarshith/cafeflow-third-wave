@@ -1,0 +1,87 @@
+name: Test and deploy to Cloud Run
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  SERVICE: cafeflow-ai
+  IMAGE: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/cafeflow/cafeflow-ai
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:  # same engine as Cloud SQL, for the integration tests
+        image: postgres:17-alpine
+        env:
+          POSTGRES_PASSWORD: ci-only-password
+          POSTGRES_DB: cafeflow_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements*.txt
+      - run: pip install -r requirements-dev.txt
+      - name: Unit, API, agent and Postgres integration tests (Gemini is mocked)
+        env:
+          TEST_DB_HOST: localhost
+          TEST_DB_PASSWORD: ci-only-password
+        run: pytest -q
+
+  deploy:
+    needs: test
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write  # keyless auth via Workload Identity Federation
+    steps:
+      - uses: actions/checkout@v7
+
+      - id: auth
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.DEPLOYER_SA }}
+
+      - uses: google-github-actions/setup-gcloud@v3
+
+      - name: Build and push image to Artifact Registry
+        run: |
+          gcloud auth configure-docker ${{ vars.GCP_REGION }}-docker.pkg.dev --quiet
+          docker build -t "$IMAGE:${{ github.sha }}" .
+          docker push "$IMAGE:${{ github.sha }}"
+
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy "$SERVICE" \
+            --project "${{ vars.GCP_PROJECT_ID }}" \
+            --region "${{ vars.GCP_REGION }}" \
+            --image "$IMAGE:${{ github.sha }}" \
+            --service-account "${{ vars.RUNTIME_SA }}" \
+            --add-cloudsql-instances "${{ vars.CLOUD_SQL_CONNECTION_NAME }}" \
+            --set-env-vars "APP_ENV=production,CAFE_PROFILE=third_wave,GEMINI_MODEL=gemini-3.8-flash,GEMINI_THINKING_LEVEL=low,CLOUD_SQL_CONNECTION_NAME=${{ vars.CLOUD_SQL_CONNECTION_NAME }},DB_NAME=cafeflow,DB_USER=cafeflow_app" \
+            --set-secrets "GEMINI_API_KEY=gemini-api-key:latest,DB_PASSWORD=cafeflow-db-password:latest" \
+            --allow-unauthenticated \
+            --cpu 1 --memory 1Gi --timeout 120 \
+            --min-instances 1 --max-instances 3 \
+            --quiet
+
+      - name: Smoke test the deployed service
+        run: |
+          URL=$(gcloud run services describe "$SERVICE" --project "${{ vars.GCP_PROJECT_ID }}" --region "${{ vars.GCP_REGION }}" --format='value(status.url)')
+          echo "Service URL: $URL" >> "$GITHUB_STEP_SUMMARY"
+          for i in 1 2 3 4 5; do curl -fsS "$URL/health" && break; sleep 5; done
+          curl -fsS "$URL/health" | python3 -c 'import json,sys; h=json.load(sys.stdin); assert h["status"]=="ok" and h["storage"]=="cloudsql", h; print(h)'

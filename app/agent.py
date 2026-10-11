@@ -23,7 +23,7 @@ from google.adk.models.base_llm import BaseLlm
 from google.adk.models.google_llm import Gemini
 from google.adk.planners import BuiltInPlanner
 from google.adk.runners import RunConfig, Runner
-from google.adk.sessions import InMemorySessionService
+from google.adk.sessions import BaseSessionService, InMemorySessionService
 from google.genai import types
 
 from .adk_agents import AGENT_LABELS, ROUTER, build_agent_graph
@@ -123,7 +123,8 @@ def _thinking_level_supported(model: str, level: str | None) -> bool:
 
 
 class CafeAgent:
-    def __init__(self, settings: Settings, executor: ToolExecutor, llm: BaseLlm | None = None):
+    def __init__(self, settings: Settings, executor: ToolExecutor, llm: BaseLlm | None = None,
+                 session_service: BaseSessionService | None = None):
         self.settings = settings
         self.executor = executor
         self.model = settings.gemini_model
@@ -133,7 +134,9 @@ class CafeAgent:
         self._model_discovery_done = False
         self._turn_results: dict[str, list[tuple[str, ToolResult]]] = {}
         self._sessions: OrderedDict[str, None] = OrderedDict()
-        self._session_service = InMemorySessionService()
+        # Cloud SQL-backed sessions in production (DatabaseSessionService); in-memory locally.
+        self._session_service = session_service or InMemorySessionService()
+        self._prune_sessions = session_service is None
         self._runner: Runner | None = None
 
     # -- Gemini client / model ---------------------------------------------------
@@ -228,7 +231,7 @@ class CafeAgent:
         if existing is None:
             await self._session_service.create_session(app_name=APP_NAME, user_id=session_id, session_id=session_id)
         self._sessions[session_id] = None
-        while len(self._sessions) > MAX_SESSIONS:
+        while self._prune_sessions and len(self._sessions) > MAX_SESSIONS:
             old, _ = self._sessions.popitem(last=False)
             await self._session_service.delete_session(app_name=APP_NAME, user_id=old, session_id=old)
 

@@ -28,4 +28,4 @@ def executor(menu, store) -> ToolExecutor:
 @pytest.fixture
 def client() -> TestClient:
     # Explicit settings with no API key: tests never depend on a local .env or spend quota.
-    return TestClient(create_app(Settings(gemini_api_key=None, cafe_profile="daily_grind")))
+    return TestClient(create_app(Settings(gemini_api_key=None, cafe_profile="daily_grind"), use_database=False))

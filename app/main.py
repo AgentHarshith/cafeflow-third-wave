@@ -17,12 +17,14 @@ from fastapi.staticfiles import StaticFiles
 
 from .agent import CafeAgent
 from .config import STATIC_DIR, Settings, load_settings
+from .db import DatabaseConfig, build_order_repository
+from .logging_setup import configure_logging, event
 from .menu_service import CafeError, MenuService, item_public
 from .order_service import InvalidTransitionError, OrderLimitError, OrderNotFoundError, OrderStore
 from .schemas import CafeProfile, ChatRequest, ChatResponse, CreateOrderRequest, Order, QuoteRequest, StatusUpdateRequest
 from .tools import ToolExecutor
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+configure_logging()
 logger = logging.getLogger("cafeflow")
 
 
@@ -87,12 +89,18 @@ def render_page(filename: str, cafe: CafeProfile) -> str:
     return page
 
 
-def create_app(settings: Settings | None = None, llm=None) -> FastAPI:
+def create_app(settings: Settings | None = None, llm=None, use_database: bool = True) -> FastAPI:
     settings = settings or load_settings()
     menu = MenuService.from_file(settings.menu_path)
-    orders = OrderStore(menu)
+    db_config = DatabaseConfig.from_env() if use_database else None
+    orders = OrderStore(menu, repository=build_order_repository(db_config))
     executor = ToolExecutor(menu, orders)
-    agent = CafeAgent(settings, executor, llm=llm)
+    session_service = None
+    if db_config:  # ADK conversation sessions live in Cloud SQL too
+        from google.adk.sessions import DatabaseSessionService
+
+        session_service = DatabaseSessionService(db_url=db_config.sqlalchemy_url(), pool_pre_ping=True, pool_size=5)
+    agent = CafeAgent(settings, executor, llm=llm, session_service=session_service)
     limiter = RateLimiter(settings.chat_rate_limit_per_minute)
 
     app = FastAPI(
@@ -157,13 +165,14 @@ def create_app(settings: Settings | None = None, llm=None) -> FastAPI:
             "environment": settings.app_env,
             "cafe_profile": menu.cafe.id,
             "menu_items": len(menu.all_items()),
-            "orders_in_memory": len(orders.list_orders()),
+            "storage": orders.backend,
             "gemini": {"configured": settings.gemini_configured, "state": agent.status.state},
         }
 
     @app.get("/api/status")
     def status():
-        return {"gemini": agent.status.as_dict(), "demo": True, "persistence": "in-memory (resets on restart)"}
+        persistence = "Cloud SQL (PostgreSQL)" if orders.backend == "cloudsql" else "in-memory (resets on restart)"
+        return {"gemini": agent.status.as_dict(), "demo": True, "persistence": persistence}
 
     @app.post("/api/status/verify")
     def verify_status():
@@ -185,7 +194,12 @@ def create_app(settings: Settings | None = None, llm=None) -> FastAPI:
         )
         if not limiter.allow(client_key):
             raise HTTPException(429, "Too many messages — please wait a minute and try again.")
-        return await agent.chat(body.message.strip(), body.history, body.shown_options, body.session_id)
+        started = time.monotonic()
+        response = await agent.chat(body.message.strip(), body.history, body.shown_options, body.session_id)
+        event(logger, "chat_turn", "Chat turn handled", mode=response.mode, agents=response.agent_route,
+              tools=[f"{t.agent or '-'}:{t.name}:{'ok' if t.ok else 'error'}" for t in response.tool_calls],
+              latency_ms=round((time.monotonic() - started) * 1000), model=response.model)
+        return response
 
     # -- orders ----------------------------------------------------------------
 
@@ -204,7 +218,8 @@ def create_app(settings: Settings | None = None, llm=None) -> FastAPI:
             order = orders.create_order(body.item_ids, body.customer_preferences)
         except CafeError as exc:
             raise _business_error(exc) from exc
-        logger.info("Order %s created: %d item(s), ₹%d", order.order_id, order.item_count, order.total_inr)
+        event(logger, "order_created", f"Order {order.order_id} created", order_id=order.order_id,
+              items=order.item_count, total_inr=order.total_inr, estimated_wait_minutes=order.estimated_wait_minutes)
         return order
 
     @app.get("/api/orders")
@@ -228,14 +243,18 @@ def create_app(settings: Settings | None = None, llm=None) -> FastAPI:
     @app.patch("/api/orders/{order_id}/status", response_model=Order)
     def update_status(order_id: str, body: StatusUpdateRequest):
         try:
-            return orders.update_status(order_id, body.status)
+            updated = orders.update_status(order_id, body.status)
         except CafeError as exc:
             raise _business_error(exc) from exc
+        event(logger, "order_status_changed", f"Order {order_id} -> {updated.status}", order_id=order_id,
+              status=updated.status)
+        return updated
 
     logger.info(
-        "CaféFlow AI ready: %s profile, %d menu items, Gemini %s (model %s)",
+        "CaféFlow AI ready: %s profile, %d menu items, storage %s, Gemini %s (model %s)",
         menu.cafe.id,
         len(menu.all_items()),
+        orders.backend,
         "configured" if settings.gemini_configured else "NOT configured — demo fallback mode",
         settings.gemini_model,
     )

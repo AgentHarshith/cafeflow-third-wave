@@ -24,7 +24,7 @@ def test_profile_loads_and_validates(profile):
 
 @pytest.mark.parametrize("profile", PROFILES)
 def test_profile_pages_render_without_placeholders(profile):
-    client = TestClient(create_app(Settings(gemini_api_key=None, cafe_profile=profile)))
+    client = TestClient(create_app(Settings(gemini_api_key=None, cafe_profile=profile), use_database=False))
     for path in ("/", "/staff"):
         page = client.get(path)
         assert page.status_code == 200
