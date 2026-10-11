@@ -90,7 +90,18 @@ Browser (vanilla HTML/CSS/JS)              FastAPI container on Cloud Run (asia-
 - **Ordering** turns chosen items into a **draft**. Only the customer's Confirm button creates the order.
 - **Wait-time** gives queue-aware readiness estimates.
 
+- **Feedback** handles the one-tap pop-up that appears when staff mark an order Collected (rating, quick chips, optional comment) and free-text feedback in chat. It saves sentiment and themes for the café team and asks exactly one follow-up when the feedback is negative.
+- **Connect People** is strictly opt-in. Customers sign up with a nickname and an optional table number. "Connect me with people" (a button, or just ask) notifies everyone else online, and each person answers 3 tap-questions: go-to coffee, milk, today's vibe. Python computes the match % and Gemini writes an icebreaker. The tool takes the browser's session from the server, so the model can't act for someone else.
+
 Follow-up messages go straight to the active specialist, and specialists hand off to each other as needed. Sessions are stored in Cloud SQL through ADK's `DatabaseSessionService`, so a conversation survives restarts and multiple instances.
+
+### Staff dashboard (`/staff`, PIN-protected)
+
+The PIN lives in Secret Manager as `staff-pin`. Read it with `gcloud secrets versions access latest --secret=staff-pin`.
+
+- **Orders:** move orders through New → Preparing → Ready → Collected. **Delayed +5m / +10m** pushes the estimate back and sends the customer an apology from the Wait-time agent, written by Gemini.
+- **Menu:** edit Regular and Large prices or mark items sold out. Changes are saved in Cloud SQL, every instance picks them up within about 5 seconds, and the agents recommend and price with the new values. **Reset** restores the printed price.
+- **Room:** average rating, mood, feedback themes and latest comments, requests the menu couldn't satisfy (from the recommendation engine), and a Gemini-written **shift brief**.
 
 ### Tools Gemini can call
 
@@ -100,6 +111,8 @@ Follow-up messages go straight to the active specialist, and specialists hand of
 | `search_menu` | Filtered menu lookup; returns `[]` when nothing matches |
 | `estimate_wait` | Queue-aware estimate for specific item IDs |
 | `prepare_order` | Builds a **draft** order with the server-side total and wait. It **cannot place orders.** |
+| `record_feedback` | Saves feedback (rating, sentiment, themes, comment), or adds details to a form submission |
+| `start_connect` / `connect_status` | Opt-in Connect People for the calling browser's session |
 
 **The model never places orders.** The backend `create_order` runs only behind
 `POST /api/orders`, which the UI calls after the customer presses **Confirm & place
@@ -168,7 +181,7 @@ Vertex AI is not used, and the explicit `vertexai=False` prevents silently mixin
 pytest -q
 ```
 
-81 tests cover menu filtering, dietary safety, recommendations (including the 10 → 5
+100 tests cover menu filtering, dietary safety, recommendations (including the 10 → 5
 minute recalculation), wait determinism, order validation, status transitions and the
 API. The ADK agent tests run the real router graph with a scripted fake model, so they
 cost no quota.
