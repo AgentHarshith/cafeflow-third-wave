@@ -52,28 +52,45 @@ This is a fixed rule, not a trained model, and the UI always labels waits as app
 ## Architecture
 
 ```
-Browser (vanilla HTML/CSS/JS)          single FastAPI container (Cloud Run)
- ├─ /         customer chat + cart  ─► /api/chat ──► agent.py ──► Gemini API (google-genai, function calling)
- ├─ /staff    staff dashboard              │            │  bounded loop (max 6 rounds)
- └─ confirm modal ─► /api/orders           │            ▼
-                                           │        tools.py  (Pydantic-validated, allow-listed)
-                                           ▼            │
-                              order_service.py ◄────────┤
-                              queue_service.py          ├─ menu_service.py ◄── data/menu.json
-                              recommendation_service.py ┘
+Browser (vanilla HTML/CSS/JS)              FastAPI container on Cloud Run (asia-south1)
+ ├─ /        customer chat + cart ─► /api/chat ─► Google ADK runner
+ ├─ /staff   staff dashboard                       Barista AI (router LlmAgent)
+ └─ confirm modal ─► /api/orders                     ├─transfer─► Discovery  (recommend_options, search_menu)
+                                                     ├─transfer─► Ordering   (prepare_order, search_menu)
+                                                     └─transfer─► Wait-time  (estimate_wait, search_menu)
+                                                              │  Gemini 3.8 Flash via Gemini API (key in Secret Manager)
+                                                              ▼
+                                   tools.py — Pydantic-validated, allow-listed backend functions
+                                   recommendation · queue · menu · order services
+                                              │
+                                              ▼
+                     Cloud SQL for PostgreSQL: orders + ADK conversation sessions
+                     Cloud Logging: structured JSON events (chat_turn, order_created, …)
 ```
 
 | File | Role |
 | --- | --- |
-| `app/main.py` | FastAPI app factory, endpoints, error handling, chat rate limit |
-| `app/agent.py` | Gemini loop, connection status, labelled rule-based fallback |
+| `app/adk_agents.py` | ADK agent graph: Barista AI router plus Discovery / Ordering / Wait-time specialists and their prompts |
+| `app/agent.py` | Runs ADK turns, per-browser sessions, connection status, labelled rule-based fallback |
 | `app/tools.py` | Function declarations, argument validation, tool execution |
-| `app/recommendation_service.py` | Time-aware combination engine |
+| `app/recommendation_service.py` | Time-aware mix-and-match engine |
 | `app/queue_service.py` | Deterministic wait estimator |
-| `app/order_service.py` | In-memory order store, server-side totals and IDs, status transitions |
-| `app/menu_service.py` | Menu loading, consistency validation, structured filtering |
-| `app/data/menu.json` | 15 sample items (one deliberately sold out) |
+| `app/order_service.py` | Server-side totals and IDs, status transitions |
+| `app/db.py` | Order persistence: Cloud SQL (PostgreSQL) or in-memory for local dev |
+| `app/logging_setup.py` | JSON logs for Cloud Logging |
+| `app/menu_service.py` | Menu loading, consistency validation, structured and hot/iced-aware filtering |
+| `app/data/cafes/*.json` | Café profiles: Third Wave Coffee (42 items from the printed menu) and fictional The Daily Grind |
 | `app/static/` | Customer app and staff dashboard (no build step) |
+| `.github/workflows/deploy.yml` | Tests, then builds, pushes and deploys to Cloud Run |
+
+### ADK agents
+
+- **Barista AI** (router) greets the customer and transfers each request to a specialist. It never states prices or waits itself.
+- **Discovery** recommends and explores the menu with mix-and-match pairings, using the time-aware engine and the café's "must try" picks.
+- **Ordering** turns chosen items into a **draft**. Only the customer's Confirm button creates the order.
+- **Wait-time** gives queue-aware readiness estimates.
+
+Follow-up messages go straight to the active specialist, and specialists hand off to each other as needed. Sessions are stored in Cloud SQL through ADK's `DatabaseSessionService`, so a conversation survives restarts and multiple instances.
 
 ### Tools Gemini can call
 
@@ -151,59 +168,70 @@ Vertex AI is not used, and the explicit `vertexai=False` prevents silently mixin
 pytest -q
 ```
 
-69 tests cover menu filtering, dietary safety, recommendations (including the 10 → 5
-minute recalculation), wait determinism, order validation, status transitions, the
-API, and the agent loop. The agent tests use a fake Gemini client, so they cost no
-quota.
+81 tests cover menu filtering, dietary safety, recommendations (including the 10 → 5
+minute recalculation), wait determinism, order validation, status transitions and the
+API. The ADK agent tests run the real router graph with a scripted fake model, so they
+cost no quota.
+
+The Postgres integration tests (orders, transitions, backlog, and ADK sessions shared
+across instances) run when `TEST_DB_HOST` is set, as in CI:
+
+```bash
+docker run -d --name cafeflow-pg -e POSTGRES_PASSWORD=dev -e POSTGRES_DB=cafeflow_test -p 55432:5432 postgres:17-alpine
+TEST_DB_HOST=localhost TEST_DB_PORT=55432 TEST_DB_PASSWORD=dev pytest -q
+```
 
 ---
 
-## Deploy to Cloud Run
+## Google Cloud deployment
 
-Use the Google account and project that hold your credits. Billing must be enabled on the project.
+Project `thirdwavecoffeecompanion`, region `asia-south1`. Every resource was created with gcloud:
 
-```bash
-# 1. Authenticate and select the project
-gcloud auth login
-gcloud config set project YOUR_PROJECT_ID
-gcloud billing projects describe YOUR_PROJECT_ID   # billingEnabled: true
+| Resource | Name | Purpose |
+| --- | --- | --- |
+| Cloud Run service | `cafeflow-ai` | The app (min 1 instance during the event to avoid cold starts; max 3) |
+| Cloud SQL (PostgreSQL 17, `db-f1-micro`) | `cafeflow-db` / database `cafeflow` / user `cafeflow_app` | Orders and ADK sessions |
+| Secret Manager | `gemini-api-key`, `cafeflow-db-password` | Injected into Cloud Run as env vars; never in code or GitHub |
+| API key | "CafeFlow AI Gemini (Cloud Run)" | Restricted to the Gemini API (`generativelanguage.googleapis.com`) |
+| Service account | `cafeflow-run` | Runtime identity: `cloudsql.client`, `logging.logWriter`, and secret access on the two secrets only |
+| Service account | `cafeflow-deployer` | CI identity: `run.admin`, Artifact Registry writer on one repo, act-as `cafeflow-run` only |
+| Artifact Registry | `cafeflow` (Docker) | Images tagged by commit SHA |
+| Workload Identity Federation | pool `github`, provider `github-oidc` | Keyless GitHub → GCP auth, limited to `AgentHarshith/cafeflow-third-wave` |
 
-# 2. Enable the required APIs
-gcloud services enable run.googleapis.com cloudbuild.googleapis.com \
-  artifactregistry.googleapis.com secretmanager.googleapis.com
+### CI/CD (GitHub Actions)
 
-# 3. Store the Gemini key in Secret Manager (paste the key on stdin, then Ctrl-D)
-gcloud secrets create gemini-api-key --replication-policy=automatic --data-file=-
+`.github/workflows/deploy.yml` runs on every push to `main`:
 
-# 4. Let the Cloud Run runtime service account read the secret
-PROJECT_NUMBER=$(gcloud projects describe YOUR_PROJECT_ID --format='value(projectNumber)')
-gcloud secrets add-iam-policy-binding gemini-api-key \
-  --member="serviceAccount:${PROJECT_NUMBER}-compute@developer.gserviceaccount.com" \
-  --role="roles/secretmanager.secretAccessor"
+1. **Test:** the full suite, including Postgres integration tests against a `postgres:17` service container.
+2. **Build and push** the Docker image to Artifact Registry.
+3. **Deploy** to Cloud Run with the Cloud SQL connection, secrets and runtime service account.
+4. **Smoke test** `/health`, which must report `storage: cloudsql`.
 
-# 5. Build from the Dockerfile and deploy
-cd cafeflow-ai
-gcloud run deploy cafeflow-ai --source . --region asia-south1 \
-  --allow-unauthenticated --max-instances 1 --memory 512Mi \
-  --set-env-vars APP_ENV=production \
-  --set-secrets GEMINI_API_KEY=gemini-api-key:latest
+Repository variables (not secrets) are `GCP_PROJECT_ID`, `GCP_REGION`, `WIF_PROVIDER`, `DEPLOYER_SA`, `RUNTIME_SA` and `CLOUD_SQL_CONNECTION_NAME`.
 
-# 6. Verify
-URL=$(gcloud run services describe cafeflow-ai --region asia-south1 --format='value(status.url)')
-curl -s "$URL/health"
-curl -s -X POST "$URL/api/status/verify"
+### Logs
+
+On Cloud Run the app writes JSON logs that Cloud Logging parses. Filter events in Logs Explorer:
+
+```
+resource.type="cloud_run_revision" AND resource.labels.service_name="cafeflow-ai" AND jsonPayload.event="chat_turn"
 ```
 
-`--max-instances 1` keeps every request on the same in-memory order store, so
-customers and staff see the same orders. The `.gcloudignore` keeps `.env` and `.venv`
-out of the upload.
+Each `chat_turn` records the mode, agent route, tools and latency. Customer message text is never logged.
+
+### After the event
+
+```bash
+gcloud run services update cafeflow-ai --min-instances 0 --region asia-south1   # stop paying for an idle instance
+gcloud sql instances patch cafeflow-db --activation-policy NEVER                  # stop the database
+```
 
 ---
 
 ## Limitations (by design for a rapid prototype)
 
-- **Orders are in memory.** They are lost when the server or Cloud Run instance restarts or scales to zero, and are not shared across instances. Production would need a database (for example Cloud SQL or Firestore).
+- **Local development without a database keeps orders in memory.** The deployed app stores them in Cloud SQL.
 - **No authentication.** Anyone with the URL can open the staff dashboard and change order statuses.
 - **No payments and no POS integration.** Orders are demo records only.
 - **Wait times are approximate.** They come from a fixed heuristic, not live kitchen data or ML.
-- **Menus are not live.** The Third Wave Coffee profile uses public third-party listings that vary by outlet and may be out of date. Its allergen data is indicative only. The Daily Grind is fictional.
+- **Menus are not live.** The Third Wave Coffee profile is transcribed from the café's printed menu, so availability is not live. Drafts are Regular size. Allergen and vegan details are indicative only. The Daily Grind is fictional.
