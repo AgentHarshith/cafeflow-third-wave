@@ -52,8 +52,9 @@ a { color: inherit; }
   background: var(--espresso); color: var(--bg);
 }
 .brand-mark svg { width: 26px; height: 26px; }
-.brand-mark.has-logo { background: var(--logo-bg, #fff); border: 1px solid var(--line); overflow: hidden; padding: 4px; }
-.brand-mark img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.brand-mark.has-logo { width: 60px; height: 44px; background: var(--logo-bg, #fff); border: 1px solid var(--line); overflow: hidden; padding: 0; }
+/* The official PNG has generous transparent padding; scale it so the mark fills the slot. */
+.brand-mark img { width: 100%; height: 100%; object-fit: contain; display: block; transform: scale(1.38); }
 .brand-text { display: flex; flex-direction: column; min-width: 0; }
 .brand-name { font: 600 20px/1.1 var(--font-display); letter-spacing: -0.01em; }
 .brand-tag { font-size: 12.5px; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -360,6 +361,7 @@ a { color: inherit; }
   .topbar { padding: 8px 16px; gap: 8px; }
   .brand { gap: 8px; }
   .brand-mark { width: 34px; height: 34px; border-radius: 10px; }
+  .brand-mark.has-logo { width: 50px; height: 38px; }
   .brand-mark svg { width: 22px; height: 22px; }
   .brand-name { font-size: 17px; white-space: nowrap; }
   .brand-tag { display: none; }
