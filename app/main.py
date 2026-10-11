@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hmac
 import html
 import json
 import logging
@@ -10,22 +11,35 @@ import threading
 import time
 from collections import defaultdict, deque
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from .agent import CafeAgent
 from .config import STATIC_DIR, Settings, load_settings
-from .db import DatabaseConfig, build_order_repository
+from .connect_service import ConnectService
+from .db import DatabaseConfig, build_storage
+from .feedback_service import DemandLog, FeedbackService
+from .menu_admin import MenuAdmin
 from .logging_setup import configure_logging, event
 from .menu_service import CafeError, MenuService, item_public
 from .order_service import InvalidTransitionError, OrderLimitError, OrderNotFoundError, OrderStore
-from .schemas import CafeProfile, ChatRequest, ChatResponse, CreateOrderRequest, Order, QuoteRequest, StatusUpdateRequest
+from .schemas import (
+    CafeProfile, ChatRequest, ConnectAnswerRequest, ConnectDeclineRequest, ConnectProfileRequest,
+    ConnectSessionRequest, DelayRequest, MenuItemUpdate,
+)
+from .schemas import  ChatResponse, CreateOrderRequest, Order, QuoteRequest, StatusUpdateRequest
 from .tools import ToolExecutor
 
 configure_logging()
 logger = logging.getLogger("cafeflow")
+
+
+# Feedback pop-up chips -> themes the staff "Room" panel aggregates.
+CHIP_THEMES = {"Great taste": "taste", "Took too long": "wait_time", "Too sweet": "taste", "Not hot enough": "temperature",
+               "Friendly staff": "service", "Wrong item": "accuracy", "Pricey": "value"}
 
 
 class RateLimiter:
@@ -93,13 +107,19 @@ def create_app(settings: Settings | None = None, llm=None, use_database: bool = 
     settings = settings or load_settings()
     menu = MenuService.from_file(settings.menu_path)
     db_config = DatabaseConfig.from_env() if use_database else None
-    orders = OrderStore(menu, repository=build_order_repository(db_config))
-    executor = ToolExecutor(menu, orders)
+    order_repo, docs = build_storage(db_config)
+    orders = OrderStore(menu, repository=order_repo)
+    menu_admin = MenuAdmin(menu, docs)
+    feedback = FeedbackService(docs, orders)
+    demand = DemandLog(docs)
+    connect = ConnectService(docs, icebreaker=lambda a, b, shared: agent.icebreaker(a, b, shared))
+    executor = ToolExecutor(menu, orders, feedback=feedback, connect=connect, demand=demand)
     session_service = None
-    if db_config:  # ADK conversation sessions live in Cloud SQL too
+    if db_config:  # ADK conversation sessions live in Cloud SQL too (small pool: db-f1-micro)
         from google.adk.sessions import DatabaseSessionService
 
-        session_service = DatabaseSessionService(db_url=db_config.sqlalchemy_url(), pool_pre_ping=True, pool_size=5)
+        session_service = DatabaseSessionService(db_url=db_config.sqlalchemy_url(), pool_pre_ping=True,
+                                                 pool_size=2, max_overflow=1)
     agent = CafeAgent(settings, executor, llm=llm, session_service=session_service)
     limiter = RateLimiter(settings.chat_rate_limit_per_minute)
 
@@ -114,6 +134,8 @@ def create_app(settings: Settings | None = None, llm=None, use_database: bool = 
 
     @app.middleware("http")
     async def _no_stale_assets(request: Request, call_next):
+        if request.url.path.startswith("/api/"):
+            await run_in_threadpool(menu_admin.sync)  # pick up staff price edits from any instance (rate-limited)
         # Pages and assets revalidate (ETag) on every load, so a redeploy is never masked by cache.
         response = await call_next(request)
         if request.url.path in ("/", "/staff") or request.url.path.startswith("/static/"):
@@ -131,6 +153,12 @@ def create_app(settings: Settings | None = None, llm=None, use_database: bool = 
     async def _unhandled(_: Request, exc: Exception):
         logger.exception("Unhandled error", exc_info=exc)
         return JSONResponse(status_code=500, content={"detail": "Something went wrong on our side. Please try again."})
+
+    def require_staff(x_staff_pin: str | None = Header(default=None)) -> None:
+        if settings.staff_pin and not hmac.compare_digest((x_staff_pin or "").encode(), settings.staff_pin.encode()):
+            raise HTTPException(401, "Staff PIN required.")
+
+    staff = [Depends(require_staff)]
 
     def _business_error(exc: CafeError) -> HTTPException:
         if isinstance(exc, OrderNotFoundError):
@@ -195,7 +223,31 @@ def create_app(settings: Settings | None = None, llm=None, use_database: bool = 
         if not limiter.allow(client_key):
             raise HTTPException(429, "Too many messages — please wait a minute and try again.")
         started = time.monotonic()
-        response = await agent.chat(body.message.strip(), body.history, body.shown_options, body.session_id)
+        extra_context, saved = None, None
+        if body.feedback_form:
+            form = body.feedback_form
+            try:
+                saved = await run_in_threadpool(lambda: feedback.record(
+                    order_id=form.order_id, rating=form.rating, comment=form.comment, source="form",
+                    themes=sorted({CHIP_THEMES[c] for c in form.chips if c in CHIP_THEMES}), session_id=body.session_id))
+            except CafeError as exc:
+                raise _business_error(exc) from exc
+            extra_context = (
+                f"[App context — the customer's feedback form for order {form.order_id} is already saved as "
+                f"{saved['id']}: rating {form.rating}/5" + (f", chips: {', '.join(form.chips)}" if form.chips else "")
+                + ". Respond as the Feedback specialist; call record_feedback with that feedback_id only if they add "
+                "new details.]"
+            )
+            event(logger, "feedback_saved", f"Feedback {saved['id']} saved", feedback_id=saved["id"],
+                  order_id=form.order_id, rating=form.rating, sentiment=saved["sentiment"], source="form")
+        response = await agent.chat(body.message.strip(), body.history, body.shown_options, body.session_id,
+                                    extra_context=extra_context)
+        if saved:
+            response.feedback = {"id": saved["id"], "saved": True}
+            if response.mode == "fallback":  # no Gemini: answer the feedback, don't recommend food
+                response.reply = ("Thank you — your feedback is saved and the café team will see it."
+                                  + (" Sorry it wasn't great; we'll pass this on." if form.rating <= 2 else ""))
+                response.recommendations, response.alternatives, response.tool_calls = [], [], []
         event(logger, "chat_turn", "Chat turn handled", mode=response.mode, agents=response.agent_route,
               tools=[f"{t.agent or '-'}:{t.name}:{'ok' if t.ok else 'error'}" for t in response.tool_calls],
               latency_ms=round((time.monotonic() - started) * 1000), model=response.model)
@@ -222,7 +274,7 @@ def create_app(settings: Settings | None = None, llm=None, use_database: bool = 
               items=order.item_count, total_inr=order.total_inr, estimated_wait_minutes=order.estimated_wait_minutes)
         return order
 
-    @app.get("/api/orders")
+    @app.get("/api/orders", dependencies=staff)
     def list_orders():
         all_orders = orders.list_orders()
         counts = orders.count_by_status()
@@ -240,7 +292,28 @@ def create_app(settings: Settings | None = None, llm=None, use_database: bool = 
         except CafeError as exc:
             raise _business_error(exc) from exc
 
-    @app.patch("/api/orders/{order_id}/status", response_model=Order)
+    @app.get("/api/orders/{order_id}/track")
+    def track_order(order_id: str):
+        """Customer-side tracking: status, delay notice and whether feedback was already given."""
+        try:
+            order = orders.get(order_id)
+        except CafeError as exc:
+            raise _business_error(exc) from exc
+        return {"order": order.model_dump(mode="json"), "feedback_given": feedback.given_for_order(order_id)}
+
+    @app.post("/api/orders/{order_id}/delay", response_model=Order, dependencies=staff)
+    def delay_order(order_id: str, body: DelayRequest):
+        try:
+            order = orders.get(order_id)
+            message = agent.delay_message(order, body.minutes)
+            updated = orders.delay(order_id, body.minutes, message)
+        except CafeError as exc:
+            raise _business_error(exc) from exc
+        event(logger, "order_delayed", f"Order {order_id} delayed {body.minutes} min", order_id=order_id,
+              minutes=body.minutes, total_delay=updated.delay_minutes)
+        return updated
+
+    @app.patch("/api/orders/{order_id}/status", response_model=Order, dependencies=staff)
     def update_status(order_id: str, body: StatusUpdateRequest):
         try:
             updated = orders.update_status(order_id, body.status)
@@ -249,6 +322,90 @@ def create_app(settings: Settings | None = None, llm=None, use_database: bool = 
         event(logger, "order_status_changed", f"Order {order_id} -> {updated.status}", order_id=order_id,
               status=updated.status)
         return updated
+
+    # -- staff: PIN check, menu editing, "Room" insights -------------------------
+
+    @app.post("/api/staff/login", dependencies=staff)
+    def staff_login():
+        return {"ok": True, "pin_required": bool(settings.staff_pin)}
+
+    @app.get("/api/staff/menu", dependencies=staff)
+    def staff_menu():
+        return {"categories": menu.categories, "items": menu_admin.staff_view()}
+
+    @app.patch("/api/staff/menu/{item_id}", dependencies=staff)
+    def staff_update_item(item_id: str, body: MenuItemUpdate):
+        try:
+            item = menu_admin.update(item_id, **body.model_dump())
+        except CafeError as exc:
+            raise _business_error(exc) from exc
+        event(logger, "menu_updated", f"Menu item {item_id} updated", item_id=item_id, price_inr=item.price_inr,
+              price_large_inr=item.price_large_inr, available=item.available)
+        return item_public(item)
+
+    @app.post("/api/staff/menu/{item_id}/reset", dependencies=staff)
+    def staff_reset_item(item_id: str):
+        try:
+            item = menu_admin.reset(item_id)
+        except CafeError as exc:
+            raise _business_error(exc) from exc
+        event(logger, "menu_updated", f"Menu item {item_id} reset", item_id=item_id, reset=True)
+        return item_public(item)
+
+    def room_snapshot() -> dict:
+        counts = orders.count_by_status()
+        return {"feedback": feedback.summary(), "demand": demand.summary(), "orders": counts}
+
+    @app.get("/api/staff/room", dependencies=staff)
+    def staff_room():
+        return room_snapshot()
+
+    @app.post("/api/staff/brief", dependencies=staff)
+    def staff_brief():
+        snapshot = room_snapshot()
+        return {"brief": agent.shift_brief(snapshot), "snapshot": snapshot}
+
+    # -- Connect People ------------------------------------------------------------
+
+    def _connect(fn):
+        try:
+            return fn()
+        except CafeError as exc:
+            raise _business_error(exc) from exc
+
+    @app.post("/api/connect/profile")
+    def connect_profile(body: ConnectProfileRequest):
+        profile = _connect(lambda: connect.register(body.session_id, body.nickname, body.table))
+        event(logger, "connect_signup", "Connect People sign-up", table=body.table)
+        return profile
+
+    @app.post("/api/connect/leave")
+    def connect_leave(body: ConnectSessionRequest):
+        connect.leave(body.session_id)
+        return {"left": True}
+
+    @app.post("/api/connect/state")
+    def connect_state(body: ConnectSessionRequest):
+        return connect.state(body.session_id)
+
+    @app.post("/api/connect/request")
+    def connect_request(body: ConnectSessionRequest):
+        result = _connect(lambda: connect.start(body.session_id))
+        if not result["needs_signup"]:
+            event(logger, "connect_request", "Connect request started", notified=result["people_notified"])
+        return result
+
+    @app.post("/api/connect/answer")
+    def connect_answer(body: ConnectAnswerRequest):
+        result = _connect(lambda: connect.answer(body.session_id, body.request_id, body.answers))
+        if result["matches_created"]:
+            event(logger, "connect_match", "Connect People match created", matches=result["matches_created"])
+        return result
+
+    @app.post("/api/connect/decline")
+    def connect_decline(body: ConnectDeclineRequest):
+        connect.decline(body.session_id, body.request_id)
+        return {"declined": True}
 
     logger.info(
         "CaféFlow AI ready: %s profile, %d menu items, storage %s, Gemini %s (model %s)",

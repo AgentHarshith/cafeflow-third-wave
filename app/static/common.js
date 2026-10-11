@@ -6,7 +6,7 @@
   const inr = (n) => "₹" + Number(n).toLocaleString("en-IN");
 
   async function api(path, options = {}) {
-    const init = { headers: { "Content-Type": "application/json" }, ...options };
+    const init = { ...options, headers: { "Content-Type": "application/json", ...(options.headers || {}) } };
     if (init.body && typeof init.body !== "string") init.body = JSON.stringify(init.body);
     let res;
     try {

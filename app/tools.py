@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
@@ -55,6 +55,20 @@ class RecommendOptionsArgs(_Args):
 
 class ItemIdsArgs(_Args):
     item_ids: list[str] = Field(min_length=1, max_length=12)
+
+
+class RecordFeedbackArgs(_Args):
+    order_id: str | None = Field(default=None, pattern=r"^CF-[0-9A-F]{6}$")
+    feedback_id: str | None = Field(default=None, pattern=r"^FB-[0-9A-F]{6}$")
+    rating: int | None = Field(default=None, ge=1, le=5)
+    sentiment: Literal["positive", "neutral", "negative"] | None = None
+    themes: list[Literal["taste", "temperature", "wait_time", "service", "value", "accuracy", "ambience",
+                         "menu_variety"]] = Field(default_factory=list, max_length=8)
+    comment: str | None = Field(default=None, max_length=600)
+
+
+class NoArgs(_Args):
+    pass
 
 
 # ---------------------------------------------------------------------------
@@ -140,6 +154,39 @@ def build_function_declarations(categories: list[str]) -> list[dict[str, Any]]:
                 "required": ["item_ids"],
             },
         },
+        {
+            "name": "record_feedback",
+            "description": (
+                "Save customer feedback for the café team. Use a new record for new feedback; pass feedback_id "
+                "(from the [App context] note) to add details to feedback already saved from the pop-up form."
+            ),
+            "parameters_json_schema": {
+                "type": "object",
+                "properties": {
+                    "order_id": {"type": "string", "description": "Order ID like CF-1A2B3C, if the feedback is about an order."},
+                    "feedback_id": {"type": "string", "description": "Existing feedback id like FB-1A2B3C to add details to."},
+                    "rating": {"type": "integer", "description": "1-5 if the customer gave a rating."},
+                    "sentiment": {"type": "string", "enum": ["positive", "neutral", "negative"]},
+                    "themes": {"type": "array", "items": {"type": "string", "enum": [
+                        "taste", "temperature", "wait_time", "service", "value", "accuracy", "ambience",
+                        "menu_variety"]}},
+                    "comment": {"type": "string", "description": "Short summary in the customer's own words."},
+                },
+            },
+        },
+        {
+            "name": "start_connect",
+            "description": (
+                "Opt-in Connect People: notify other signed-up customers in the café that this customer would "
+                "like to connect. Returns needs_signup if the customer hasn't signed up yet."
+            ),
+            "parameters_json_schema": {"type": "object", "properties": {}},
+        },
+        {
+            "name": "connect_status",
+            "description": "This customer's Connect People status: people online, responses and match percentages.",
+            "parameters_json_schema": {"type": "object", "properties": {}},
+        },
     ]
 
 
@@ -175,9 +222,13 @@ def _compact_combo(combo: dict[str, Any]) -> dict[str, Any]:
 
 
 class ToolExecutor:
-    def __init__(self, menu: MenuService, orders: OrderStore):
+    def __init__(self, menu: MenuService, orders: OrderStore, *, feedback=None, connect=None, demand=None):
         self.menu = menu
         self.orders = orders
+        self.feedback = feedback  # FeedbackService
+        self.connect = connect  # ConnectService
+        self.demand = demand  # DemandLog
+        self._session_id: str | None = None
         self.declarations = build_function_declarations(menu.categories)
         cafe = menu.cafe
         # Real-café profiles carry indicative (unofficial) dietary/allergen data: say so in every result.
@@ -187,13 +238,17 @@ class ToolExecutor:
             "recommend_options": (RecommendOptionsArgs, self._recommend_options),
             "estimate_wait": (ItemIdsArgs, self._estimate_wait),
             "prepare_order": (ItemIdsArgs, self._prepare_order),
+            "record_feedback": (RecordFeedbackArgs, self._record_feedback),
+            "start_connect": (NoArgs, self._start_connect),
+            "connect_status": (NoArgs, self._connect_status),
         }
 
     @property
     def tool_names(self) -> list[str]:
         return list(self._handlers)
 
-    def execute(self, name: str, raw_args: dict[str, Any] | None) -> ToolResult:
+    def execute(self, name: str, raw_args: dict[str, Any] | None, session_id: str | None = None) -> ToolResult:
+        """Run one tool. session_id comes from the server (ADK session), never from the model."""
         raw_args = dict(raw_args or {})
         if name not in self._handlers:
             return ToolResult(name, raw_args, False, {"error": f"Unknown tool '{name}'."}, "unknown tool")
@@ -205,6 +260,7 @@ class ToolExecutor:
             return ToolResult(name, raw_args, False, {"error": f"Invalid arguments: {problems}"}, "rejected: invalid arguments")
         clean = args.model_dump(exclude_defaults=True)
         try:
+            self._session_id = session_id
             response, summary, ui = handler(args)
             return ToolResult(name, clean, True, response, summary, ui)
         except CafeError as exc:
@@ -237,6 +293,11 @@ class ToolExecutor:
         if self._data_note:
             response["data_note"] = self._data_note
         options = result["options"]
+        if self.demand is not None:
+            try:
+                self.demand.record(args.model_dump(exclude_defaults=True), len(options))
+            except Exception:  # noqa: BLE001 - analytics must never break a recommendation
+                logger.warning("Could not record demand signal")
         if options:
             fastest = min(c["estimated_wait_minutes"] for c in options)
             summary = f"{len(options)} option(s) meet every constraint · fastest ~{fastest} min"
@@ -263,3 +324,36 @@ class ToolExecutor:
             "next_step": "Customer must press 'Confirm order' in the app. No order exists yet.",
         }
         return draft, f"draft ₹{quote['total_inr']} · awaiting confirmation", {"order_proposal": draft}
+
+    def _record_feedback(self, args: RecordFeedbackArgs):
+        if self.feedback is None:
+            raise CafeError("Feedback is not available right now.")
+        saved = self.feedback.record(**args.model_dump(), source="chat", session_id=self._session_id)
+        response = {"saved": True, "feedback_id": saved["id"], "sentiment": saved["sentiment"],
+                    "themes": saved["themes"], "note": "Visible to the café team in the staff dashboard."}
+        return response, f"saved {saved['id']} · {saved['sentiment']}", {"feedback": response}
+
+    def _start_connect(self, args: NoArgs):
+        if self.connect is None or not self._session_id:
+            raise CafeError("Connect People is not available right now.")
+        result = self.connect.start(self._session_id)
+        if result["needs_signup"]:
+            response = {"needs_signup": True, "next_step": "Customer taps 'Sign up to connect' (nickname + optional table)."}
+            return response, "needs sign-up", {"connect": {"action": "signup"}}
+        response = {**result, "questions": "go-to coffee, milk, today's vibe",
+                    "next_step": "Customer answers the 3 quick questions; matches appear when others answer."}
+        ui = {"connect": {"action": "answer", "request_id": result["request_id"]}} if not result["answered"] else {}
+        return response, f"{result['people_notified']} people notified", ui
+
+    def _connect_status(self, args: NoArgs):
+        if self.connect is None or not self._session_id:
+            raise CafeError("Connect People is not available right now.")
+        state = self.connect.state(self._session_id)
+        response = {
+            "signed_up": state["signed_up"],
+            "people_online": state["people_online"],
+            "my_request": state["my_request"],
+            "matches": [{"percent": m["percent"], "with": m["with_profile"], "shared": m["shared"]}
+                        for m in state["matches"]],
+        }
+        return response, f"{len(state['matches'])} match(es)", {}

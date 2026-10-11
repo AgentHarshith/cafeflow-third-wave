@@ -26,6 +26,8 @@
       <span id="ai-status" class="status-pill status-checking" role="status" title="Checking Gemini connection" data-short="Checking…">
         <span class="dot" aria-hidden="true"></span><span class="label">Checking AI…</span>
       </span>
+      <button id="connect-btn" class="link-btn connect-btn" type="button" title="Opt-in: meet other people in the café"><span aria-hidden="true">👥 </span><span class="label">Meet people</span></button>
+      <button id="connect-panel-btn" class="link-btn" type="button" hidden title="Your matches and sharing settings">Matches</button>
       <a class="link-btn" href="/staff">Staff<span class="long"> dashboard</span></a>
     </div>
   </header>
@@ -81,5 +83,6 @@
   <script>window.CAFE = {{CAFE_JSON}};</script>
   <script src="/static/common.js"></script>
   <script src="/static/app.js"></script>
+  <script src="/static/connect.js"></script>
 </body>
 </html>

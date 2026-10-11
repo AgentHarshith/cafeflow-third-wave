@@ -30,31 +30,63 @@
 
   <main class="staff-main">
     <div class="staff-title">
-      <h1>Incoming orders</h1>
+      <div class="tabs" role="tablist">
+        <button class="tab on" type="button" data-tab="orders" role="tab">Orders</button>
+        <button class="tab" type="button" data-tab="menu" role="tab">Menu</button>
+        <button class="tab" type="button" data-tab="room" role="tab">Room</button>
+      </div>
       <span class="muted" id="updated">Loading…</span>
     </div>
 
-    <section class="stats" aria-label="Summary">
-      <div class="stat-tile"><div class="k">Active orders</div><div class="v" id="s-active">–</div></div>
-      <div class="stat-tile"><div class="k">New</div><div class="v" id="s-confirmed">–</div></div>
-      <div class="stat-tile"><div class="k">Preparing</div><div class="v" id="s-preparing">–</div></div>
-      <div class="stat-tile"><div class="k">Ready</div><div class="v" id="s-ready">–</div></div>
-      <div class="stat-tile"><div class="k">Queued work</div><div class="v" id="s-backlog">–</div></div>
-    </section>
-
     <p class="form-error" id="board-error" hidden></p>
 
-    <section class="board" aria-label="Order board">
-      <div class="column"><h2>New <span class="count" id="c-confirmed">0</span></h2><div id="col-confirmed"></div></div>
-      <div class="column"><h2>Preparing <span class="count" id="c-preparing">0</span></h2><div id="col-preparing"></div></div>
-      <div class="column"><h2>Ready for pickup <span class="count" id="c-ready">0</span></h2><div id="col-ready"></div></div>
+    <section id="tab-orders" class="tab-panel">
+      <section class="stats" aria-label="Summary">
+        <div class="stat-tile"><div class="k">Active orders</div><div class="v" id="s-active">–</div></div>
+        <div class="stat-tile"><div class="k">New</div><div class="v" id="s-confirmed">–</div></div>
+        <div class="stat-tile"><div class="k">Preparing</div><div class="v" id="s-preparing">–</div></div>
+        <div class="stat-tile"><div class="k">Ready</div><div class="v" id="s-ready">–</div></div>
+        <div class="stat-tile"><div class="k">Queued work</div><div class="v" id="s-backlog">–</div></div>
+      </section>
+      <section class="board" aria-label="Order board">
+        <div class="column"><h2>New <span class="count" id="c-confirmed">0</span></h2><div id="col-confirmed"></div></div>
+        <div class="column"><h2>Preparing <span class="count" id="c-preparing">0</span></h2><div id="col-preparing"></div></div>
+        <div class="column"><h2>Ready for pickup <span class="count" id="c-ready">0</span></h2><div id="col-ready"></div></div>
+      </section>
+      <details class="history" id="history">
+        <summary>Completed &amp; cancelled (<span id="c-done">0</span>)</summary>
+        <div id="history-body"></div>
+      </details>
     </section>
 
-    <details class="history" id="history">
-      <summary>Completed &amp; cancelled (<span id="c-done">0</span>)</summary>
-      <div id="history-body"></div>
-    </details>
+    <section id="tab-menu" class="tab-panel" hidden>
+      <p class="muted-line" style="margin:0 0 14px">Edit prices or mark items sold out. Changes save to Cloud SQL and the AI agents use them immediately. Orders are priced at the moment they're placed.</p>
+      <div id="menu-editor"></div>
+    </section>
+
+    <section id="tab-room" class="tab-panel" hidden>
+      <section class="stats" id="room-stats"></section>
+      <div class="room-grid">
+        <div class="room-card"><h2>Latest feedback</h2><div id="room-feedback"></div></div>
+        <div class="room-card"><h2>What customers wanted but didn't get</h2><div id="room-demand"></div></div>
+      </div>
+      <div class="room-card" style="margin-top:16px">
+        <div class="connect-row"><h2 style="margin:0">Shift brief</h2><button class="btn btn-primary btn-sm" type="button" id="brief-btn">Generate with Gemini</button></div>
+        <div id="brief-out" class="brief"></div>
+      </div>
+    </section>
   </main>
+
+  <div id="pin-gate" class="modal" hidden>
+    <div class="modal-backdrop"></div>
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="pin-title">
+      <h3 id="pin-title">Staff sign-in</h3>
+      <p class="modal-sub">Enter the staff PIN to manage orders, prices and the Room view.</p>
+      <label class="field">PIN <input type="password" id="pin-input" inputmode="numeric" autocomplete="off" maxlength="12"></label>
+      <p class="form-error" id="pin-error" hidden></p>
+      <div class="modal-actions"><a class="btn" href="/">Customer app</a><button class="btn btn-primary" type="button" id="pin-go">Sign in</button></div>
+    </div>
+  </div>
 
   <script src="/static/common.js"></script>
   <script src="/static/staff.js"></script>

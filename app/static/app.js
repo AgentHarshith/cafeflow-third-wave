@@ -213,7 +213,7 @@
 
   // ---------------------------------------------------------------- send
 
-  async function sendMessage(text) {
+  async function sendMessage(text, extra = {}, displayHtml = null) {
     text = text.trim();
     if (!text || state.busy) return;
     state.busy = true;
@@ -221,14 +221,15 @@
     els.input.value = "";
     autoGrow();
 
-    addMessage("user", `<div class="bubble">${escapeHtml(text)}</div>`);
+    addMessage("user", `<div class="bubble">${displayHtml || escapeHtml(text)}</div>`);
     const typing = addMessage("assistant", `<div class="bubble"><span class="typing"><span class="dots"><i></i><i></i><i></i></span>Checking the menu and kitchen queue…</span></div>`);
 
     try {
-      const resp = await api("/api/chat", { method: "POST", body: { message: text, history: state.history.slice(-20), shown_options: state.shownOptions || [], session_id: state.sessionId } });
+      const resp = await api("/api/chat", { method: "POST", body: { message: text, history: state.history.slice(-20), shown_options: state.shownOptions || [], session_id: state.sessionId, ...extra } });
       typing.remove();
       renderAssistant(resp);
       rememberPreferences(resp);
+      if (resp.connect && window.CFConnect) window.CFConnect.handleAction(resp.connect);
       state.history.push({ role: "user", text }, { role: "assistant", text: resp.reply.slice(0, 3500) });
       state.shownOptions = shownOptions(resp);
       if (resp.mode === "gemini") {
@@ -392,6 +393,7 @@
       const body = { item_ids: ids, confirmed: true };
       if (state.lastPreferences) body.customer_preferences = state.lastPreferences;
       const order = await api("/api/orders", { method: "POST", body });
+      trackOrder(order);
       state.cart.clear();
       state.quote = null;
       renderCart();
@@ -472,6 +474,88 @@
   els.modal.addEventListener("click", (e) => { if (e.target.closest("[data-close]")) closeModal(); });
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !els.modal.hidden) closeModal(); });
 
+  // ---------------------------------------------------------------- order tracking & feedback
+
+  const TRACK_KEY = "cf-orders";
+  function loadTracked() {
+    try { return JSON.parse(sessionStorage.getItem(TRACK_KEY) || "{}"); } catch { return {}; }
+  }
+  function saveTracked(t) {
+    try { sessionStorage.setItem(TRACK_KEY, JSON.stringify(t)); } catch { /* fine */ }
+  }
+  state.tracked = loadTracked(); // order_id -> {status, delayedAt, feedbackAsked}
+
+  function trackOrder(order) {
+    state.tracked[order.order_id] = { status: order.status, delayedAt: order.delayed_at || null, feedbackAsked: false,
+                                      items: order.lines.map((l) => `${l.quantity}× ${l.name}`).join(", ") };
+    saveTracked(state.tracked);
+  }
+
+  function agentNote(label, html, cls = "") {
+    addMessage("assistant", `<div class="msg-meta"><span class="badge ${cls}">${escapeHtml(label)}</span></div><div class="bubble">${html}</div>`, "system");
+  }
+
+  async function pollOrders() {
+    for (const [id, t] of Object.entries(state.tracked)) {
+      if (t.done) continue;
+      let data;
+      try { data = await api(`/api/orders/${encodeURIComponent(id)}/track`); } catch { continue; }
+      const o = data.order;
+      if (o.delayed_at && o.delayed_at !== t.delayedAt) {
+        t.delayedAt = o.delayed_at;
+        agentNote("Wait-time agent", `⏱️ ${escapeHtml(o.delay_message || "Your order is running a little late.")}<br><span class="muted-line">Order ${escapeHtml(id)} · new estimate around <b>${timeOf(o.estimated_ready_at)}</b></span>`, "badge-orange");
+      }
+      if (o.status !== t.status) {
+        t.status = o.status;
+        if (o.status === "ready") agentNote("Order update", `🔔 Order <b>${escapeHtml(id)}</b> is <b>ready for pickup</b>!`, "badge-green");
+        if (o.status === "cancelled") { agentNote("Order update", `Order ${escapeHtml(id)} was cancelled by the café.`); t.done = true; }
+      }
+      if (o.status === "completed") {
+        if (!t.feedbackAsked && !data.feedback_given && els.modal.hidden) { t.feedbackAsked = true; openFeedback(id, t.items); }
+        if (t.feedbackAsked || data.feedback_given) t.done = true;
+      }
+      saveTracked(state.tracked);
+    }
+  }
+
+  const FEEDBACK_FACES = [[1, "😞"], [2, "🙁"], [3, "😐"], [4, "🙂"], [5, "😍"]];
+  const FEEDBACK_CHIPS = ["Perfect", "Great taste", "Took too long", "Too sweet", "Not hot enough", "Friendly staff", "Wrong item", "Pricey"];
+
+  function openFeedback(orderId, items) {
+    openModal(`
+      <h3>How was it?</h3>
+      <p class="modal-sub">Order ${escapeHtml(orderId)} · ${escapeHtml(items || "")}</p>
+      <div class="faces" role="radiogroup" aria-label="Rating">${FEEDBACK_FACES.map(([v, f]) => `<button type="button" class="face" data-rate="${v}" aria-label="${v} out of 5">${f}</button>`).join("")}</div>
+      <div class="chips fb-chips">${FEEDBACK_CHIPS.map((c) => `<button type="button" class="chip" data-chip="${escapeHtml(c)}">${escapeHtml(c)}</button>`).join("")}</div>
+      <textarea id="fb-comment" class="fb-comment" rows="2" maxlength="600" placeholder="Anything else? (optional)"></textarea>
+      <div class="modal-actions">
+        <button class="btn" type="button" data-close>Skip</button>
+        <button class="btn btn-primary" type="button" id="fb-send" disabled>Send feedback</button>
+      </div>`);
+    let rating = null;
+    const chips = new Set();
+    els.modalContent.querySelectorAll(".face").forEach((b) => b.addEventListener("click", () => {
+      rating = Number(b.dataset.rate);
+      els.modalContent.querySelectorAll(".face").forEach((x) => x.classList.toggle("on", x === b));
+      document.getElementById("fb-send").disabled = false;
+    }));
+    els.modalContent.querySelectorAll("[data-chip]").forEach((b) => b.addEventListener("click", () => {
+      const c = b.dataset.chip;
+      chips.has(c) ? chips.delete(c) : chips.add(c);
+      b.classList.toggle("on", chips.has(c));
+    }));
+    document.getElementById("fb-send").addEventListener("click", () => {
+      const comment = document.getElementById("fb-comment").value.trim();
+      closeModal();
+      const face = FEEDBACK_FACES.find(([v]) => v === rating)[1];
+      const text = `Feedback for order ${orderId}: ${rating}/5${chips.size ? " — " + [...chips].join(", ") : ""}${comment ? `. ${comment}` : ""}`;
+      const display = `${face} <b>${rating}/5</b>${chips.size ? " · " + [...chips].map(escapeHtml).join(" · ") : ""}${comment ? `<br>“${escapeHtml(comment)}”` : ""}`;
+      sendMessage(text, { feedback_form: { order_id: orderId, rating, chips: [...chips], comment: comment || null } }, display);
+    });
+  }
+
+  window.CFApp = { openModal, closeModal, addMessage, agentNote, sendMessage, state, isModalOpen: () => !els.modal.hidden };
+
   // ---------------------------------------------------------------- init
 
   async function init() {
@@ -484,6 +568,7 @@
     }
     const gemini = await refreshStatus(false);
     if (gemini && gemini.state === "unverified") refreshStatus(true);
+    setInterval(pollOrders, 5000);
   }
 
   init();

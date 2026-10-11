@@ -73,7 +73,7 @@ jobs:
             --service-account "${{ vars.RUNTIME_SA }}" \
             --add-cloudsql-instances "${{ vars.CLOUD_SQL_CONNECTION_NAME }}" \
             --set-env-vars "APP_ENV=production,CAFE_PROFILE=third_wave,GEMINI_MODEL=gemini-3.8-flash,GEMINI_THINKING_LEVEL=low,CLOUD_SQL_CONNECTION_NAME=${{ vars.CLOUD_SQL_CONNECTION_NAME }},DB_NAME=cafeflow,DB_USER=cafeflow_app" \
-            --set-secrets "GEMINI_API_KEY=gemini-api-key:latest,DB_PASSWORD=cafeflow-db-password:latest" \
+            --set-secrets "GEMINI_API_KEY=gemini-api-key:latest,DB_PASSWORD=cafeflow-db-password:latest,STAFF_PIN=staff-pin:latest" \
             --allow-unauthenticated \
             --cpu 1 --memory 1Gi --timeout 120 \
             --min-instances 1 --max-instances 3 \

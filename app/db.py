@@ -1,11 +1,17 @@
-"""Order persistence: Cloud SQL for PostgreSQL in production, in-memory for local dev.
+"""Persistence: Cloud SQL for PostgreSQL in production, in-memory for local dev.
 
 Connection settings come from the environment:
   CLOUD_SQL_CONNECTION_NAME  project:region:instance — on Cloud Run, connects through the
                              built-in Cloud SQL Unix socket (/cloudsql/<name>)
   DB_HOST / DB_PORT          alternative TCP target (e.g. a local Cloud SQL Auth Proxy)
   DB_NAME, DB_USER, DB_PASSWORD
-With none of these set, the app keeps orders in memory (they reset on restart).
+With none of these set, everything is kept in memory (and resets on restart).
+
+Two stores share one small connection pool (db-f1-micro allows ~25 connections, and
+Cloud Run may run up to 3 instances):
+  * orders  — one row per order, status transitions row-locked
+  * docs    — small JSON documents for feedback, menu price overrides, Connect People
+              profiles and requests, and demand signals
 """
 
 from __future__ import annotations
@@ -17,12 +23,19 @@ import threading
 from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Protocol
+from datetime import datetime, timezone
+from typing import Any, Protocol
 from urllib.parse import quote
 
 from .schemas import Order
 
 logger = logging.getLogger("cafeflow.db")
+
+POOL_MAX = 4
+
+
+def _now() -> datetime:
+    return datetime.now(timezone.utc)
 
 
 @dataclass(frozen=True)
@@ -62,6 +75,48 @@ class DatabaseConfig:
 
     def describe(self) -> str:
         return f"postgres {self.socket_dir or f'{self.host}:{self.port}'}/{self.name}"
+
+
+SCHEMA = """
+CREATE TABLE IF NOT EXISTS orders (
+    order_id        TEXT PRIMARY KEY,
+    status          TEXT NOT NULL,
+    payload         JSONB NOT NULL,
+    station_minutes JSONB NOT NULL,
+    created_at      TIMESTAMPTZ NOT NULL,
+    updated_at      TIMESTAMPTZ NOT NULL
+);
+CREATE INDEX IF NOT EXISTS orders_status_idx ON orders (status);
+CREATE INDEX IF NOT EXISTS orders_created_idx ON orders (created_at DESC);
+
+CREATE TABLE IF NOT EXISTS docs (
+    kind       TEXT NOT NULL,
+    id         TEXT NOT NULL,
+    data       JSONB NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (kind, id)
+);
+CREATE INDEX IF NOT EXISTS docs_kind_updated_idx ON docs (kind, updated_at DESC);
+"""
+
+
+class Database:
+    """One psycopg pool shared by the order repository and the document store."""
+
+    def __init__(self, config: DatabaseConfig):
+        from psycopg_pool import ConnectionPool
+
+        self.config = config
+        self.pool = ConnectionPool(config.psycopg_conninfo(), min_size=1, max_size=POOL_MAX, open=True, timeout=15)
+        with self.pool.connection() as conn:
+            conn.execute(SCHEMA)
+        logger.info("Connected to %s", config.describe())
+
+
+# ---------------------------------------------------------------------------
+# Orders
+# ---------------------------------------------------------------------------
 
 
 class OrderRepository(Protocol):
@@ -123,32 +178,13 @@ class InMemoryOrderRepository:
             return len(self._orders)
 
 
-SCHEMA = """
-CREATE TABLE IF NOT EXISTS orders (
-    order_id        TEXT PRIMARY KEY,
-    status          TEXT NOT NULL,
-    payload         JSONB NOT NULL,
-    station_minutes JSONB NOT NULL,
-    created_at      TIMESTAMPTZ NOT NULL,
-    updated_at      TIMESTAMPTZ NOT NULL
-);
-CREATE INDEX IF NOT EXISTS orders_status_idx ON orders (status);
-CREATE INDEX IF NOT EXISTS orders_created_idx ON orders (created_at DESC);
-"""
-
-
 class PostgresOrderRepository:
     """Orders in Cloud SQL. Payload is the validated Order model as JSONB."""
 
     backend = "cloudsql"
 
-    def __init__(self, config: DatabaseConfig):
-        from psycopg_pool import ConnectionPool
-
-        self._pool = ConnectionPool(config.psycopg_conninfo(), min_size=1, max_size=5, open=True, timeout=15)
-        with self._pool.connection() as conn:
-            conn.execute(SCHEMA)
-        logger.info("Order store connected: %s", config.describe())
+    def __init__(self, database: Database):
+        self._pool = database.pool
 
     def add(self, order: Order, station_minutes: dict[str, int]) -> bool:
         with self._pool.connection() as conn:
@@ -199,5 +235,118 @@ class PostgresOrderRepository:
             return conn.execute("SELECT count(*) FROM orders").fetchone()[0]
 
 
-def build_order_repository(config: DatabaseConfig | None) -> OrderRepository:
-    return PostgresOrderRepository(config) if config else InMemoryOrderRepository()
+# ---------------------------------------------------------------------------
+# Documents
+# ---------------------------------------------------------------------------
+
+Mutator = Callable[[dict[str, Any] | None], dict[str, Any] | None]
+
+
+class DocStore(Protocol):
+    backend: str
+
+    def put(self, kind: str, doc_id: str, data: dict[str, Any]) -> None: ...
+    def get(self, kind: str, doc_id: str) -> dict[str, Any] | None: ...
+    def list(self, kind: str, limit: int = 200) -> list[dict[str, Any]]: ...
+    def update(self, kind: str, doc_id: str, mutate: Mutator) -> dict[str, Any] | None: ...
+    def delete(self, kind: str, doc_id: str) -> bool: ...
+    def list_updated_since(self, kind: str, since: datetime | None) -> list[tuple[str, dict[str, Any], datetime]]: ...
+
+
+class InMemoryDocStore:
+    backend = "memory"
+
+    def __init__(self) -> None:
+        self._docs: dict[tuple[str, str], tuple[dict[str, Any], datetime]] = {}
+        self._lock = threading.RLock()
+
+    def put(self, kind: str, doc_id: str, data: dict[str, Any]) -> None:
+        with self._lock:
+            self._docs[(kind, doc_id)] = (json.loads(json.dumps(data, default=str)), _now())
+
+    def get(self, kind: str, doc_id: str) -> dict[str, Any] | None:
+        with self._lock:
+            found = self._docs.get((kind, doc_id))
+            return json.loads(json.dumps(found[0])) if found else None
+
+    def list(self, kind: str, limit: int = 200) -> list[dict[str, Any]]:
+        with self._lock:
+            rows = [(d, t) for (k, _), (d, t) in self._docs.items() if k == kind]
+        rows.sort(key=lambda r: r[1], reverse=True)
+        return [json.loads(json.dumps(d)) for d, _ in rows[:limit]]
+
+    def update(self, kind: str, doc_id: str, mutate: Mutator) -> dict[str, Any] | None:
+        with self._lock:  # atomic read-modify-write
+            current = self.get(kind, doc_id)
+            updated = mutate(current)
+            if updated is not None:
+                self.put(kind, doc_id, updated)
+            return updated
+
+    def delete(self, kind: str, doc_id: str) -> bool:
+        with self._lock:
+            return self._docs.pop((kind, doc_id), None) is not None
+
+    def list_updated_since(self, kind: str, since: datetime | None) -> list[tuple[str, dict[str, Any], datetime]]:
+        with self._lock:
+            return [(i, json.loads(json.dumps(d)), t) for (k, i), (d, t) in self._docs.items()
+                    if k == kind and (since is None or t > since)]
+
+
+class PostgresDocStore:
+    backend = "cloudsql"
+
+    def __init__(self, database: Database):
+        self._pool = database.pool
+
+    def put(self, kind: str, doc_id: str, data: dict[str, Any]) -> None:
+        with self._pool.connection() as conn:
+            conn.execute(
+                "INSERT INTO docs (kind, id, data) VALUES (%s, %s, %s) "
+                "ON CONFLICT (kind, id) DO UPDATE SET data = EXCLUDED.data, updated_at = now()",
+                (kind, doc_id, json.dumps(data, default=str)),
+            )
+
+    def get(self, kind: str, doc_id: str) -> dict[str, Any] | None:
+        with self._pool.connection() as conn:
+            row = conn.execute("SELECT data FROM docs WHERE kind = %s AND id = %s", (kind, doc_id)).fetchone()
+        return row[0] if row else None
+
+    def list(self, kind: str, limit: int = 200) -> list[dict[str, Any]]:
+        with self._pool.connection() as conn:
+            rows = conn.execute("SELECT data FROM docs WHERE kind = %s ORDER BY updated_at DESC LIMIT %s",
+                                (kind, limit)).fetchall()
+        return [r[0] for r in rows]
+
+    def update(self, kind: str, doc_id: str, mutate: Mutator) -> dict[str, Any] | None:
+        with self._pool.connection() as conn, conn.transaction():
+            row = conn.execute("SELECT data FROM docs WHERE kind = %s AND id = %s FOR UPDATE",
+                               (kind, doc_id)).fetchone()
+            updated = mutate(row[0] if row else None)  # may raise -> transaction rolls back
+            if updated is not None:
+                conn.execute(
+                    "INSERT INTO docs (kind, id, data) VALUES (%s, %s, %s) "
+                    "ON CONFLICT (kind, id) DO UPDATE SET data = EXCLUDED.data, updated_at = now()",
+                    (kind, doc_id, json.dumps(updated, default=str)),
+                )
+            return updated
+
+    def delete(self, kind: str, doc_id: str) -> bool:
+        with self._pool.connection() as conn:
+            return conn.execute("DELETE FROM docs WHERE kind = %s AND id = %s", (kind, doc_id)).rowcount == 1
+
+    def list_updated_since(self, kind: str, since: datetime | None) -> list[tuple[str, dict[str, Any], datetime]]:
+        with self._pool.connection() as conn:
+            if since is None:
+                rows = conn.execute("SELECT id, data, updated_at FROM docs WHERE kind = %s", (kind,)).fetchall()
+            else:
+                rows = conn.execute("SELECT id, data, updated_at FROM docs WHERE kind = %s AND updated_at > %s",
+                                    (kind, since)).fetchall()
+        return [(r[0], r[1], r[2]) for r in rows]
+
+
+def build_storage(config: DatabaseConfig | None) -> tuple[OrderRepository, DocStore]:
+    if config is None:
+        return InMemoryOrderRepository(), InMemoryDocStore()
+    database = Database(config)
+    return PostgresOrderRepository(database), PostgresDocStore(database)

@@ -243,12 +243,13 @@ class CafeAgent:
         history: list[ChatTurn],
         shown_options: list[list[str]] | None = None,
         session_id: str | None = None,
+        extra_context: str | None = None,
     ) -> ChatResponse:
         session_id = session_id or uuid.uuid4().hex
         if not self.settings.gemini_configured and self._llm_override is None:
             return self._fallback(message, history, "Gemini API key not configured.", session_id)
         try:
-            return await self._adk_chat(message, shown_options or [], session_id)
+            return await self._adk_chat(message, shown_options or [], session_id, extra_context)
         except Exception as exc:  # noqa: BLE001 - any agent failure degrades to the labelled fallback
             detail, _ = _classify_error(exc)
             logger.warning("Agent turn failed: %s", detail)
@@ -291,11 +292,14 @@ class CafeAgent:
         results = [r for inv in invocation_ids for r in self._turn_results.pop(inv, [])]
         return reply, route, results
 
-    async def _adk_chat(self, message: str, shown_options: list[list[str]], session_id: str) -> ChatResponse:
+    async def _adk_chat(self, message: str, shown_options: list[list[str]], session_id: str,
+                        extra_context: str | None = None) -> ChatResponse:
         await self._ensure_session(session_id)
         parts = [types.Part.from_text(text=message)]
         if context := self._screen_context(shown_options):
             parts.append(types.Part.from_text(text=context))
+        if extra_context:
+            parts.append(types.Part.from_text(text=extra_context))
 
         reply, route, results = await self._run_turn(session_id, types.Content(role="user", parts=parts))
         # Guard against an answer that quotes prices without consulting the menu.
@@ -314,6 +318,64 @@ class CafeAgent:
             )
         return self._build_response(reply, "gemini", results, model=self.model, route=route or [ROUTER],
                                     session_id=session_id)
+
+    # -- one-shot Gemini writing (delay apology, icebreaker, shift brief) ------------
+
+    def quick_text(self, prompt: str, max_chars: int = 400) -> str | None:
+        """One plain Gemini call for short copy; returns None (caller uses a template) on any failure."""
+        if not self.settings.gemini_configured or self._llm_override is not None:
+            return None
+        config = None
+        if _thinking_level_supported(self.model, self.settings.gemini_thinking_level):
+            config = types.GenerateContentConfig(thinking_config=types.ThinkingConfig(thinking_level="LOW"))
+        try:
+            response = self._get_client().models.generate_content(model=self.model, contents=prompt, config=config)
+            text = self._text_of(response.candidates[0].content if response.candidates else None).strip()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Quick Gemini call failed: %s", _classify_error(exc)[0])
+            return None
+        return text[:max_chars].strip() or None
+
+    def delay_message(self, order, minutes: int) -> str:
+        items = ", ".join(f"{line.quantity}× {line.name}" for line in order.lines)
+        written = self.quick_text(
+            f"You are the Wait-time agent of CaféFlow AI at {self.executor.menu.cafe.name}. Staff just flagged that "
+            f"a customer's order ({items}) is running about {minutes} minutes behind. Write a warm, sincere apology "
+            "of at most 2 short sentences: say sorry, give the extra time in minutes, thank them for their patience. "
+            "No clock times, no discounts or promises, no emojis, no greeting line."
+        )
+        return written or (f"Sorry — your order is running about {minutes} minutes behind. "
+                           "Thanks so much for your patience; we'll have it ready as soon as we can.")
+
+    def icebreaker(self, a: dict[str, str], b: dict[str, str], shared: list[str]) -> str | None:
+        return self.quick_text(
+            "Two guests at a café just matched on a coffee-preferences quiz. "
+            f"Guest A answered {a}; guest B answered {b}; shared picks: {shared or 'none'}. "
+            "Write ONE friendly, specific icebreaker line (max 22 words) either could open with, based on their "
+            "answers. No names, no emojis, no quotes around it.",
+            max_chars=200,
+        )
+
+    def shift_brief(self, snapshot: dict[str, Any]) -> dict[str, Any]:
+        import json as _json
+
+        text = self.quick_text(
+            f"You help the shift lead at {self.executor.menu.cafe.name}. From this live data (customer feedback, "
+            "requests the menu could not satisfy, and order counts), write exactly 3 short, concrete action bullets "
+            "for the next hour, each starting with '- '. Data: " + _json.dumps(snapshot, default=str)[:6000],
+            max_chars=700,
+        )
+        if text:
+            return {"text": text, "by": "gemini"}
+        fb, dm = snapshot["feedback"], snapshot["demand"]
+        lines = []
+        if dm["top_unmet"]:
+            lines.append(f"- {dm['top_unmet'][0]['count']} customer(s) wanted \"{dm['top_unmet'][0]['request']}\" and nothing fit — consider a quick option for them.")
+        if fb["themes"]:
+            theme = next(iter(fb["themes"]))
+            lines.append(f"- Most mentioned in feedback: {theme.replace('_', ' ')} — check it with the team.")
+        lines.append(f"- {snapshot['orders'].get('confirmed', 0)} new and {snapshot['orders'].get('preparing', 0)} in-progress orders right now.")
+        return {"text": "\n".join(lines), "by": "template"}
 
     # -- structured payload ----------------------------------------------------
 
@@ -349,11 +411,24 @@ class CafeAgent:
             menu_items=payload.get("menu_items", [])[:8],
             wait_estimate=payload.get("wait_estimate"),
             order_proposal=payload.get("order_proposal"),
+            connect=payload.get("connect"),
+            feedback=payload.get("feedback"),
         )
 
     # -- fallback ----------------------------------------------------------------
 
     def _fallback(self, message: str, history: list[ChatTurn], reason: str, session_id: str | None = None) -> ChatResponse:
+        notice = f"Demo mode — {reason} Responses use rule-based parsing, not Gemini."
+        if session_id and re.search(r"\b(connect|meet (new )?people|meet someone|make friends|people here)\b", message.lower()):
+            result = self.executor.execute("start_connect", {}, session_id=session_id)
+            if result.ok and result.response.get("needs_signup"):
+                reply = "**Demo mode** — happy to help you meet people! Tap **Sign up to connect** (just a nickname and optional table) first."
+            elif result.ok:
+                reply = (f"**Demo mode** — I've let {result.response['people_notified']} people here know. Answer the 3 quick "
+                         "questions that just opened; your match % appears when someone answers.")
+            else:
+                reply = "**Demo mode** — Connect People isn't available right now."
+            return self._build_response(reply, "fallback", [(None, result)], notice=notice, session_id=session_id)
         constraints: dict[str, Any] = {}
         for turn in [*history[-HISTORY_TURNS:], ChatTurn(role="user", text=message)]:
             if turn.role == "user":
@@ -364,7 +439,6 @@ class CafeAgent:
             constraints.pop("category")  # phrase didn't match this café's categories; search everything
             result = self.executor.execute("recommend_options", constraints)
         reply = _fallback_reply(constraints, result)
-        notice = f"Demo mode — {reason} Responses use rule-based parsing, not Gemini."
         return self._build_response(reply, "fallback", [(None, result)], notice=notice, session_id=session_id)
 
 

@@ -13,7 +13,7 @@ import uuid
 import pytest
 
 from app.config import CAFES_DIR, Settings
-from app.db import DatabaseConfig, PostgresOrderRepository
+from app.db import Database, DatabaseConfig, PostgresDocStore, PostgresOrderRepository
 from app.menu_service import MenuService
 from app.order_service import InvalidTransitionError, OrderNotFoundError, OrderStore
 from app.tools import ToolExecutor
@@ -34,9 +34,9 @@ def db_config() -> DatabaseConfig:
 
 @pytest.fixture
 def pg_store(db_config) -> OrderStore:
-    repo = PostgresOrderRepository(db_config)
+    repo = PostgresOrderRepository(Database(db_config))
     with repo._pool.connection() as conn:
-        conn.execute("TRUNCATE orders")
+        conn.execute("TRUNCATE orders, docs")
     return OrderStore(MenuService.from_file(CAFES_DIR / "daily_grind.json"), repository=repo)
 
 
@@ -93,3 +93,15 @@ def test_adk_sessions_persist_in_postgres_across_instances(db_config, pg_store):
     second = asyncio.run(instance().chat("actually five minutes", [], None, session))
     assert first.agent_route == ["Barista AI", "Discovery"]
     assert second.agent_route == ["Discovery"]  # the new instance resumed the stored session
+
+
+def test_doc_store_round_trip_and_locked_update(db_config, pg_store):
+    docs = PostgresDocStore(Database(db_config))
+    docs.put("feedback", "FB-000001", {"id": "FB-000001", "rating": 4})
+    assert docs.get("feedback", "FB-000001")["rating"] == 4
+    docs.update("feedback", "FB-000001", lambda d: {**d, "rating": 5})
+    assert [d["rating"] for d in docs.list("feedback")] == [5]
+    since = docs.list_updated_since("feedback", None)[0][2]
+    docs.put("feedback", "FB-000002", {"id": "FB-000002"})
+    assert [r[0] for r in docs.list_updated_since("feedback", since)] == ["FB-000002"]
+    assert docs.delete("feedback", "FB-000001") and docs.get("feedback", "FB-000001") is None

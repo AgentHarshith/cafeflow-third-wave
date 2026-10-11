@@ -152,6 +152,7 @@ class MenuService:
                 raise ValueError(f"Duplicate menu item id: {item.id}")
             self._items[item.id] = item
         self.cafe = cafe
+        self._defaults: dict[str, MenuItem] = dict(self._items)  # the printed menu, for staff "reset"
         # Category order as it first appears in the menu file.
         self.categories: list[str] = list(dict.fromkeys(i.category for i in self._items.values()))
 
@@ -166,6 +167,15 @@ class MenuService:
 
     def get(self, item_id: str) -> MenuItem | None:
         return self._items.get(item_id)
+
+    def default(self, item_id: str) -> MenuItem | None:
+        return self._defaults.get(item_id)
+
+    def set_item(self, item: MenuItem) -> None:
+        """Replace an item with an edited copy (staff price / sold-out changes)."""
+        if item.id not in self._defaults:
+            raise UnknownItemError(f"Unknown menu item id: {item.id}")
+        self._items[item.id] = item
 
     # -- categories --------------------------------------------------------------
 

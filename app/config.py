@@ -33,6 +33,7 @@ class Settings:
     gemini_thinking_level: str | None = "low"
     app_env: str = "development"
     cafe_profile: str = DEFAULT_CAFE_PROFILE
+    staff_pin: str | None = None  # when set, staff endpoints require the X-Staff-Pin header
     max_tool_rounds: int = 6
     chat_rate_limit_per_minute: int = 20
 
@@ -65,6 +66,7 @@ def load_settings() -> Settings:
         gemini_thinking_level=None if thinking == "default" else thinking,
         app_env=os.getenv("APP_ENV", "").strip() or "development",
         cafe_profile=os.getenv("CAFE_PROFILE", "").strip() or DEFAULT_CAFE_PROFILE,
+        staff_pin=os.getenv("STAFF_PIN", "").strip() or None,
         max_tool_rounds=_int_env("MAX_TOOL_ROUNDS", 6),
         chat_rate_limit_per_minute=_int_env("CHAT_RATE_LIMIT_PER_MINUTE", 20),
     )

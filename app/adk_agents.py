@@ -3,6 +3,8 @@
     barista_ai ──transfer──► discovery_agent  (search_menu, recommend_options)
                ──transfer──► ordering_agent   (prepare_order, search_menu)
                ──transfer──► wait_time_agent  (estimate_wait, search_menu)
+               ──transfer──► feedback_agent   (record_feedback)
+               ──transfer──► connect_agent    (start_connect, connect_status)
 
 Specialists can transfer to each other or back to the router. Every tool is the
 same deterministic, Pydantic-validated backend function used everywhere else in
@@ -29,6 +31,8 @@ AGENT_LABELS = {
     "discovery_agent": "Discovery",
     "ordering_agent": "Ordering",
     "wait_time_agent": "Wait-time",
+    "feedback_agent": "Feedback",
+    "connect_agent": "Connect People",
 }
 
 Recorder = Callable[[str, str, ToolResult], None]
@@ -49,7 +53,7 @@ class CafeTool(BaseTool):
         )
 
     async def run_async(self, *, args: dict[str, Any], tool_context) -> Any:
-        result = self._executor.execute(self.name, dict(args or {}))
+        result = self._executor.execute(self.name, dict(args or {}), session_id=tool_context.user_id)
         self._recorder(tool_context.invocation_id, tool_context.agent_name, result)
         return result.response
 
@@ -79,7 +83,7 @@ def _shared_rules(cafe: CafeProfile) -> str:
 - Never quote internal numbers like filling or sweetness scores; describe them in words ("very filling", "lightly sweet").
 - The latest customer message may be followed by an [App context] note (added by the app, not typed by the customer) listing the option cards on screen with their item ids. Use those ids when the customer refers to an option ("I'll take option 2"). Never repeat that note or show item ids.
 - Be friendly and concise: at most about 110 words. Use a short bulleted list with bold item names. The app shows cards with Add buttons under your message, so don't repeat every detail.
-- If a request belongs to another specialist, transfer to it without announcing the transfer: discovery_agent (choosing food and drink), ordering_agent (turning chosen items into an order draft), wait_time_agent (how long / when ready), or barista_ai for anything else.{data}"""
+- If a request belongs to another specialist, transfer to it without announcing the transfer: discovery_agent (choosing food and drink), ordering_agent (turning chosen items into an order draft), wait_time_agent (how long / when ready), feedback_agent (feedback, compliments, complaints), connect_agent (meeting other people here), or barista_ai for anything else.{data}"""
 
 
 def _menu_guide(executor: ToolExecutor) -> str:
@@ -153,6 +157,32 @@ def build_agent_graph(
         tools=tools("estimate_wait", "search_menu"),
         **common,
     )
+    feedback = LlmAgent(
+        name="feedback_agent",
+        description="Listens to feedback, compliments and complaints about an order or visit and saves it for the café team.",
+        instruction=f"""You are the Feedback specialist of CaféFlow AI at {who}.
+- When a customer shares how their order or visit went, call record_feedback once with: rating (1-5) if they gave one, sentiment, themes from the allowed list, a short comment in their words, and the order_id if known.
+- If an [App context] note says the feedback form was already saved as FB-…, do NOT create a new record. Only call record_feedback with that feedback_id if the customer adds new details later.
+- Thank them warmly in one or two sentences. If the feedback is negative, apologise sincerely and ask exactly ONE specific follow-up question (e.g. what was off about the temperature). Don't ask follow-ups for positive feedback.
+- Never promise refunds, discounts or replacements — say the café team will see it.
+- Under 60 words. Don't show feedback ids.
+- If the customer moves on to something else (ordering, recommendations, meeting people), transfer to the right specialist.""",
+        tools=tools("record_feedback"),
+        **common,
+    )
+    connect = LlmAgent(
+        name="connect_agent",
+        description="Helps customers meet other people in the café (opt-in): sign-up, notifying others, match results.",
+        instruction=f"""You are the Connect People specialist of CaféFlow AI at {who}. You help customers meet other people in the café — strictly opt-in.
+- When the customer wants to meet, connect or chat with people, call start_connect.
+  - If it returns needs_signup: ask them to tap "Sign up to connect" (the app opens it) — just a nickname and an optional table number, nothing else.
+  - Otherwise: say how many people online were notified, that everyone answers the same 3 quick questions (go-to coffee, milk, today's vibe) shown in the app, and that their match % will pop up as soon as someone answers.
+- If they ask about matches or responses, call connect_status and report match % with the other person's nickname and table only.
+- Never ask for or share real names, phone numbers or social handles. Warm and brief: under 60 words.
+- For anything else, transfer to the right specialist.""",
+        tools=tools("start_connect", "connect_status"),
+        **common,
+    )
     return LlmAgent(
         name=ROUTER,
         description="Barista AI: CaféFlow's front-of-house router.",
@@ -160,7 +190,9 @@ def build_agent_graph(
 - discovery_agent — anything about what to eat or drink: recommendations, menu questions, budget/diet/time constraints, pairings, "surprise me".
 - ordering_agent — the customer says which items they want ("I'll take…", "order option 2").
 - wait_time_agent — "how long", "when will it be ready", questions about the queue.
+- feedback_agent — the customer shares feedback, a compliment or a complaint about their order or visit, or a message starts with "Feedback for order".
+- connect_agent — the customer wants to meet, connect or chat with other people here ("connect me with people").
 Transfer immediately and silently whenever a request matches a specialist. Only greetings, thanks and small talk are yours: reply in one or two warm sentences and offer to help find something. Never state menu items, prices or wait times yourself.""",
-        sub_agents=[discovery, ordering, wait_time],
+        sub_agents=[discovery, ordering, wait_time, feedback, connect],
         **common,
     )

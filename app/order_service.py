@@ -148,6 +148,26 @@ class OrderStore:
     def count_by_status(self) -> dict[str, int]:
         return self._repo.count_by_status()
 
+    def delay(self, order_id: str, minutes: int, message: str) -> Order:
+        """Staff flag an order as running late; the customer sees the apology and new estimate."""
+        def apply(order: Order) -> Order:
+            if order.status not in ("confirmed", "preparing"):
+                raise InvalidTransitionError(f"Order {order_id} is already {order.status}; it can't be delayed.")
+            now = self._clock()
+            return order.model_copy(update={
+                "delay_minutes": order.delay_minutes + minutes,
+                "estimated_wait_minutes": order.estimated_wait_minutes + minutes,
+                "estimated_ready_at": max(order.estimated_ready_at, now) + timedelta(minutes=minutes),
+                "delay_message": message,
+                "delayed_at": now,
+                "updated_at": now,
+            })
+
+        updated = self._repo.update(order_id, apply)
+        if updated is None:
+            raise OrderNotFoundError(f"Order {order_id} not found.")
+        return updated
+
     def update_status(self, order_id: str, new_status: str) -> Order:
         def transition(order: Order) -> Order:
             if new_status not in ALLOWED_TRANSITIONS[order.status]:

@@ -124,6 +124,9 @@ class Order(BaseModel):
     created_at: datetime
     updated_at: datetime
     customer_preferences: CustomerPreferences | None = None
+    delay_minutes: int = 0  # added by staff with the "Delayed" button
+    delay_message: str | None = None  # apology written by the Wait-time agent
+    delayed_at: datetime | None = None
 
 
 class CreateOrderRequest(BaseModel):
@@ -149,6 +152,65 @@ class StatusUpdateRequest(BaseModel):
     status: OrderStatus
 
 
+class DelayRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    minutes: Literal[5, 10, 15]
+
+
+class MenuItemUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    price_inr: int | None = Field(default=None, ge=1, le=2000)
+    price_large_inr: int | None = Field(default=None, ge=1, le=2000)
+    available: bool | None = None
+
+
+SessionIdStr = Annotated[str, Field(pattern=r"^[A-Za-z0-9_-]{8,64}$")]
+
+
+class FeedbackForm(BaseModel):
+    """One-tap feedback from the pop-up shown when staff mark an order Collected."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    order_id: str = Field(pattern=r"^CF-[0-9A-F]{6}$")
+    rating: int = Field(ge=1, le=5)
+    chips: list[Literal["Perfect", "Great taste", "Took too long", "Too sweet", "Not hot enough",
+                        "Friendly staff", "Wrong item", "Pricey"]] = Field(default_factory=list, max_length=8)
+    comment: str | None = Field(default=None, max_length=600)
+
+
+class ConnectProfileRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    session_id: SessionIdStr
+    nickname: str = Field(min_length=2, max_length=24)
+    table: int | None = Field(default=None, ge=1, le=200)
+    consent: Literal[True]
+
+
+class ConnectSessionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    session_id: SessionIdStr
+
+
+class ConnectAnswerRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    session_id: SessionIdStr
+    request_id: str = Field(pattern=r"^CR-[0-9A-F]{8}$")
+    answers: dict[str, str] = Field(max_length=3)
+
+
+class ConnectDeclineRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    session_id: SessionIdStr
+    request_id: str = Field(pattern=r"^CR-[0-9A-F]{8}$")
+
+
 # ---------------------------------------------------------------------------
 # Chat
 # ---------------------------------------------------------------------------
@@ -168,6 +230,7 @@ class ChatRequest(BaseModel):
     shown_options: list[list[ItemIdStr]] = Field(default_factory=list, max_length=12)
     # Anonymous per-browser id that keys the server-side ADK session (no personal data).
     session_id: str | None = Field(default=None, pattern=r"^[A-Za-z0-9_-]{8,64}$")
+    feedback_form: FeedbackForm | None = None
 
 
 class ToolCallTrace(BaseModel):
@@ -191,3 +254,5 @@ class ChatResponse(BaseModel):
     menu_items: list[dict[str, Any]] = Field(default_factory=list)
     wait_estimate: dict[str, Any] | None = None
     order_proposal: dict[str, Any] | None = None
+    connect: dict[str, Any] | None = None  # e.g. {"action": "signup"} or {"action": "answer", "request_id": ...}
+    feedback: dict[str, Any] | None = None
