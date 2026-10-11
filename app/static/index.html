@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>CaféFlow AI</title>
+  <meta name="description" content="Your café visit, intelligently coordinated." />
+  <meta name="theme-color" content="#F8F3EC" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/styles.css" />
+  {{THEME_STYLE}}
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%233B2A20'/%3E%3Cpath d='M9 13h11v5a5 5 0 0 1-5 5h-1a5 5 0 0 1-5-5z' fill='%23F8F3EC'/%3E%3Cpath d='M20 14h1.5a2.5 2.5 0 0 1 0 5H20' stroke='%23F8F3EC' stroke-width='1.6' fill='none'/%3E%3C/svg%3E" />
+</head>
+<body class="customer">
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="CaféFlow AI home">
+      <span class="{{BRAND_MARK_CLASS}}" aria-hidden="true">{{BRAND_MARK}}</span>
+      <span class="brand-text">
+        <span class="brand-name">CaféFlow AI</span>
+        <span class="brand-tag">{{BRAND_FOR}}Your café visit, intelligently coordinated.</span>
+      </span>
+    </a>
+    <div class="topbar-actions">
+      <span id="ai-status" class="status-pill status-checking" role="status" title="Checking Gemini connection" data-short="Checking…">
+        <span class="dot" aria-hidden="true"></span><span class="label">Checking AI…</span>
+      </span>
+      <a class="link-btn" href="/staff">Staff<span class="long"> dashboard</span></a>
+    </div>
+  </header>
+
+  <div class="demo-strip">{{DISCLAIMER}}</div>
+
+  <main class="layout">
+    <section class="chat" aria-label="Chat with CaféFlow AI">
+      <div id="messages" class="messages" aria-live="polite">
+        <article class="msg assistant welcome">
+          <div class="bubble">
+            <p class="welcome-title">{{WELCOME_TITLE}}</p>
+            <p>{{WELCOME_BODY}}</p>
+            <div class="chips" id="quick-prompts">{{QUICK_PROMPTS}}</div>
+          </div>
+        </article>
+      </div>
+
+      <form id="composer" class="composer" autocomplete="off">
+        <label for="input" class="sr-only">Message</label>
+        <textarea id="input" rows="1" maxlength="800" placeholder="e.g. I'm vegetarian, have ₹250 and need something filling in 10 minutes"></textarea>
+        <button id="send" class="send-btn" type="submit" aria-label="Send message">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </form>
+    </section>
+
+    <aside id="cart" class="cart" aria-label="Your order">
+      <div class="cart-head">
+        <h2>Your order</h2>
+        <button id="cart-close" class="icon-btn cart-close" type="button" aria-label="Close cart">✕</button>
+      </div>
+      <div id="cart-body" class="cart-body"></div>
+      <div class="cart-foot">
+        <div class="cart-summary" id="cart-summary"></div>
+        <button id="review-btn" class="btn btn-primary btn-block" type="button" disabled>Review order</button>
+        <p class="fine">Prices and wait are calculated by the server. Wait times are approximate.</p>
+      </div>
+    </aside>
+  </main>
+
+  <button id="cart-fab" class="cart-fab" type="button" hidden>
+    <span id="cart-fab-label">Cart</span><span class="fab-cta">Review →</span>
+  </button>
+
+  <div id="modal" class="modal" hidden>
+    <div class="modal-backdrop" data-close></div>
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+      <div id="modal-content"></div>
+    </div>
+  </div>
+
+  <script>window.CAFE = {{CAFE_JSON}};</script>
+  <script src="/static/common.js"></script>
+  <script src="/static/app.js"></script>
+</body>
+</html>

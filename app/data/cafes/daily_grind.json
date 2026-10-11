@@ -1,0 +1,328 @@
+{
+  "cafe": {
+    "id": "daily_grind",
+    "name": "The Daily Grind",
+    "fictional": true,
+    "currency": "INR",
+    "sample_data": true,
+    "notice": "Fictional sample menu for the CaféFlow AI demo. Not the live inventory of a real café.",
+    "disclaimer": "Demo · The Daily Grind is a fictional café · simulated orders · no payments taken",
+    "logo": null,
+    "theme": {},
+    "welcome_title": "Hi! I'm your café companion at The Daily Grind.",
+    "welcome_body": "Tell me your budget, diet and how much time you have — I'll check the real menu and the kitchen queue, and find what will actually be ready in time.",
+    "quick_prompts": [
+      "I have ₹200 and need something filling.",
+      "I'm vegetarian and have only 10 minutes.",
+      "Recommend a cold drink under ₹150.",
+      "Find something not too sweet."
+    ],
+    "allergen_data": "sample",
+    "data_note": "All items, prices, dietary tags and allergens are fictional sample data."
+  },
+  "items": [
+    {
+      "id": "espresso_01",
+      "name": "Single-Origin Espresso",
+      "category": "Coffee",
+      "price_inr": 110,
+      "description": "A bright, chocolatey double shot pulled from Chikmagalur beans.",
+      "dietary_tags": [
+        "vegetarian",
+        "vegan",
+        "dairy-free",
+        "gluten-free"
+      ],
+      "allergens": [],
+      "preparation_time_minutes": 2,
+      "available": true,
+      "filling_score": 1,
+      "sweetness_level": 0,
+      "station": "bar",
+      "diet_marker": "veg"
+    },
+    {
+      "id": "cappuccino_01",
+      "name": "Cappuccino",
+      "category": "Coffee",
+      "price_inr": 160,
+      "description": "Double espresso with velvety steamed milk and a thick cap of foam.",
+      "dietary_tags": [
+        "vegetarian",
+        "gluten-free"
+      ],
+      "allergens": [
+        "milk"
+      ],
+      "preparation_time_minutes": 4,
+      "available": true,
+      "filling_score": 1,
+      "sweetness_level": 1,
+      "station": "bar",
+      "diet_marker": "veg"
+    },
+    {
+      "id": "hazelnut_latte_01",
+      "name": "Hazelnut Latte",
+      "category": "Coffee",
+      "price_inr": 190,
+      "description": "Espresso, steamed milk and house-made hazelnut syrup.",
+      "dietary_tags": [
+        "vegetarian",
+        "gluten-free"
+      ],
+      "allergens": [
+        "milk",
+        "tree-nuts"
+      ],
+      "preparation_time_minutes": 4,
+      "available": true,
+      "filling_score": 2,
+      "sweetness_level": 4,
+      "station": "bar",
+      "diet_marker": "veg"
+    },
+    {
+      "id": "masala_chai_01",
+      "name": "Masala Chai",
+      "category": "Tea",
+      "price_inr": 80,
+      "description": "Assam tea simmered with ginger, cardamom and whole milk.",
+      "dietary_tags": [
+        "vegetarian",
+        "gluten-free"
+      ],
+      "allergens": [
+        "milk"
+      ],
+      "preparation_time_minutes": 4,
+      "available": true,
+      "filling_score": 1,
+      "sweetness_level": 3,
+      "station": "bar",
+      "diet_marker": "veg"
+    },
+    {
+      "id": "jasmine_green_tea_01",
+      "name": "Jasmine Green Tea",
+      "category": "Tea",
+      "price_inr": 100,
+      "description": "Delicate whole-leaf green tea scented with jasmine blossoms.",
+      "dietary_tags": [
+        "vegetarian",
+        "vegan",
+        "dairy-free",
+        "gluten-free"
+      ],
+      "allergens": [],
+      "preparation_time_minutes": 3,
+      "available": true,
+      "filling_score": 1,
+      "sweetness_level": 0,
+      "station": "bar",
+      "diet_marker": "veg"
+    },
+    {
+      "id": "cold_brew_01",
+      "name": "Classic Cold Brew",
+      "category": "Cold Drinks",
+      "price_inr": 140,
+      "description": "Smooth, chilled 18-hour cold brew coffee served over ice.",
+      "dietary_tags": [
+        "vegetarian",
+        "vegan",
+        "dairy-free",
+        "gluten-free"
+      ],
+      "allergens": [],
+      "preparation_time_minutes": 2,
+      "available": true,
+      "filling_score": 1,
+      "sweetness_level": 1,
+      "station": "bar",
+      "diet_marker": "veg"
+    },
+    {
+      "id": "iced_mocha_01",
+      "name": "Iced Mocha",
+      "category": "Cold Drinks",
+      "price_inr": 180,
+      "description": "Espresso, dark chocolate and cold milk shaken over ice.",
+      "dietary_tags": [
+        "vegetarian",
+        "gluten-free"
+      ],
+      "allergens": [
+        "milk"
+      ],
+      "preparation_time_minutes": 4,
+      "available": true,
+      "filling_score": 2,
+      "sweetness_level": 4,
+      "station": "bar",
+      "diet_marker": "veg"
+    },
+    {
+      "id": "lemon_mint_cooler_01",
+      "name": "Lemon Mint Cooler",
+      "category": "Cold Drinks",
+      "price_inr": 120,
+      "description": "Fresh lime, mint and a pinch of black salt, topped with soda.",
+      "dietary_tags": [
+        "vegetarian",
+        "vegan",
+        "dairy-free",
+        "gluten-free"
+      ],
+      "allergens": [],
+      "preparation_time_minutes": 3,
+      "available": true,
+      "filling_score": 1,
+      "sweetness_level": 2,
+      "station": "bar",
+      "diet_marker": "veg"
+    },
+    {
+      "id": "mango_coconut_smoothie_01",
+      "name": "Mango Coconut Smoothie",
+      "category": "Cold Drinks",
+      "price_inr": 170,
+      "description": "Alphonso mango blended with coconut milk. Seasonal — currently sold out.",
+      "dietary_tags": [
+        "vegetarian",
+        "vegan",
+        "dairy-free",
+        "gluten-free"
+      ],
+      "allergens": [],
+      "preparation_time_minutes": 5,
+      "available": false,
+      "filling_score": 3,
+      "sweetness_level": 4,
+      "station": "bar",
+      "diet_marker": "veg"
+    },
+    {
+      "id": "paneer_tikka_sandwich_01",
+      "name": "Paneer Tikka Sandwich",
+      "category": "Sandwiches",
+      "price_inr": 200,
+      "description": "Grilled tandoori paneer, mint chutney and pickled onions on toasted sourdough.",
+      "dietary_tags": [
+        "vegetarian"
+      ],
+      "allergens": [
+        "milk",
+        "gluten"
+      ],
+      "preparation_time_minutes": 8,
+      "available": true,
+      "filling_score": 5,
+      "sweetness_level": 0,
+      "station": "kitchen",
+      "diet_marker": "veg"
+    },
+    {
+      "id": "veg_club_sandwich_01",
+      "name": "Grilled Veg Club Sandwich",
+      "category": "Sandwiches",
+      "price_inr": 180,
+      "description": "Triple-decker with grilled vegetables, cheddar and tomato chutney.",
+      "dietary_tags": [
+        "vegetarian"
+      ],
+      "allergens": [
+        "milk",
+        "gluten"
+      ],
+      "preparation_time_minutes": 7,
+      "available": true,
+      "filling_score": 4,
+      "sweetness_level": 0,
+      "station": "kitchen",
+      "diet_marker": "veg"
+    },
+    {
+      "id": "chicken_pesto_sandwich_01",
+      "name": "Chicken Pesto Sandwich",
+      "category": "Sandwiches",
+      "price_inr": 220,
+      "description": "Herb-roasted chicken, basil-cashew pesto and greens on focaccia.",
+      "dietary_tags": [],
+      "allergens": [
+        "gluten",
+        "milk",
+        "tree-nuts"
+      ],
+      "preparation_time_minutes": 9,
+      "available": true,
+      "filling_score": 5,
+      "sweetness_level": 0,
+      "station": "kitchen",
+      "diet_marker": "non-veg"
+    },
+    {
+      "id": "falafel_hummus_wrap_01",
+      "name": "Falafel Hummus Wrap",
+      "category": "Sandwiches",
+      "price_inr": 190,
+      "description": "Crisp falafel, hummus, pickled onions and greens in a whole-wheat wrap.",
+      "dietary_tags": [
+        "vegetarian",
+        "vegan",
+        "dairy-free"
+      ],
+      "allergens": [
+        "gluten",
+        "sesame"
+      ],
+      "preparation_time_minutes": 6,
+      "available": true,
+      "filling_score": 4,
+      "sweetness_level": 0,
+      "station": "kitchen",
+      "diet_marker": "veg"
+    },
+    {
+      "id": "banana_walnut_bread_01",
+      "name": "Eggless Banana Walnut Bread",
+      "category": "Snacks",
+      "price_inr": 120,
+      "description": "A thick, toasted slice of house-baked eggless banana bread.",
+      "dietary_tags": [
+        "vegetarian"
+      ],
+      "allergens": [
+        "gluten",
+        "milk",
+        "tree-nuts"
+      ],
+      "preparation_time_minutes": 1,
+      "available": true,
+      "filling_score": 3,
+      "sweetness_level": 3,
+      "station": "kitchen",
+      "diet_marker": "veg"
+    },
+    {
+      "id": "veg_puff_01",
+      "name": "Vegetable Puff",
+      "category": "Snacks",
+      "price_inr": 80,
+      "description": "Flaky butter pastry filled with spiced potato and peas, warmed to order.",
+      "dietary_tags": [
+        "vegetarian"
+      ],
+      "allergens": [
+        "gluten",
+        "milk"
+      ],
+      "preparation_time_minutes": 3,
+      "available": true,
+      "filling_score": 3,
+      "sweetness_level": 0,
+      "station": "kitchen",
+      "diet_marker": "veg"
+    }
+  ]
+}
